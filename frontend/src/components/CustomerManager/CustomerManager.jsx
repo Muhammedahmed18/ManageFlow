@@ -201,7 +201,7 @@ const CustomerManager = () => {
               previewItem={previewProduct}
               setPreviewItem={setPreviewProduct}
               setShowPreview={setShowPreview}
-              colors={{ textDark: "#1f2937" }}
+              colors={{ textDark: "#1f2937  " }}
             />
           )}
         </main>
