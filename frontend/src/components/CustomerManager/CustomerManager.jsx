@@ -6,6 +6,7 @@ import Dashboard from "./Dashboard";
 import Settings from "./Settings";
 import OrderManagement from "./OrderManagement";
 import api from "../../services/authService";
+import ProductPreviewModal from "../BusinessManager/modals/ProductPreviewModal";
 
 const CustomerManager = () => {
   const [loading, setLoading] = useState(true);
@@ -18,6 +19,7 @@ const CustomerManager = () => {
   const [previewProduct, setPreviewProduct] = useState(null);
   const [orderTemplate, setOrderTemplate] = useState(null);
   const [invoiceTemplate, setInvoiceTemplate] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const navigate = useNavigate();
 
@@ -156,7 +158,10 @@ const CustomerManager = () => {
                             <td className="px-6 py-4 text-sm text-gray-600">{product.custom_id || '-'}</td>
                             <td className="px-6 py-4">
                               <button
-                                onClick={() => setPreviewProduct(product)}
+                                onClick={() => {
+                                  setPreviewProduct(product);
+                                  setShowPreview(true);
+                                }}
                                 className="font-medium text-left text-blue-700 hover:underline"
                               >
                                 {product.name}
@@ -191,12 +196,13 @@ const CustomerManager = () => {
           {activeTab === "order" && <OrderManagement />}
 
           {/* Product Preview Modal */}
-          {previewProduct && (
-            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
-                {/* Modal content remains the same */}
-              </div>
-            </div>
+          {showPreview && previewProduct && (
+            <ProductPreviewModal
+              previewItem={previewProduct}
+              setPreviewItem={setPreviewProduct}
+              setShowPreview={setShowPreview}
+              colors={{ textDark: "#1f2937" }}
+            />
           )}
         </main>
       </div>
