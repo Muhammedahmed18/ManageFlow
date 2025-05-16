@@ -1,25 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Plus, ChevronDown, ChevronUp, 
-  Calendar, Package, Check, Clock, Truck, X 
+  ChevronDown, ChevronUp, 
+  Calendar, Package, Check, Clock, Truck, X, Plus
 } from 'lucide-react';
+import DynamicOrderForm from './modals/DynamicOrderForm';
+import api from '../../services/authService';
 
 const OrderManagement = ({ 
-  templates, 
   orders, 
-  onSelectTemplate, 
   onCreateOrder,
   colors 
 }) => {
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [expandedOrder, setExpandedOrder] = useState(null);
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [templateId, setTemplateId] = useState(null);
 
-  const handleTemplateSelect = (template) => {
-    setSelectedTemplate(template);
-    if (onSelectTemplate) {
-      onSelectTemplate(template);
-    }
-  };
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      try {
+        const res = await api.get('/template-upload/');
+        if (res.data && res.data.length > 0) {
+          setTemplateId(res.data[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to fetch template:', err);
+      }
+    };
+    fetchTemplate();
+  }, []);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -40,7 +48,7 @@ const OrderManagement = ({
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800">Order Management</h2>
         <button 
-          onClick={onCreateOrder}
+          onClick={() => setShowOrderForm(true)}
           className="flex items-center px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
           style={{ backgroundColor: colors.primary }}
         >
@@ -49,34 +57,8 @@ const OrderManagement = ({
         </button>
       </div>
 
-      {templates.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-700 mb-3">Select a Template</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {templates.map(template => (
-              <div 
-                key={template.id}
-                onClick={() => handleTemplateSelect(template)}
-                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                  selectedTemplate?.id === template.id 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <FileText size={20} className="text-gray-600 mr-2" />
-                  <h4 className="font-medium text-gray-800">{template.name}</h4>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">{template.description || 'No description'}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="mt-8">
         <h3 className="text-lg font-medium text-gray-700 mb-3">Recent Orders</h3>
-        
         {orders.length === 0 ? (
           <div className="p-6 text-center bg-gray-50 rounded-lg">
             <p className="text-gray-500">No orders found</p>
@@ -91,9 +73,7 @@ const OrderManagement = ({
                 >
                   <div className="flex items-center">
                     {getStatusIcon(order.status)}
-                    <span className="ml-2 font-medium">
-                      Order #{order.id}
-                    </span>
+                    <span className="ml-2 font-medium">Order #{order.id}</span>
                   </div>
                   <div className="flex items-center text-sm text-gray-500">
                     <Calendar size={14} className="mr-1" />
@@ -105,7 +85,7 @@ const OrderManagement = ({
                     )}
                   </div>
                 </div>
-                
+
                 {expandedOrder === order.id && (
                   <div className="p-4 bg-gray-50 border-t">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -120,9 +100,7 @@ const OrderManagement = ({
                       <p className="text-sm font-medium text-gray-500">Status</p>
                       <div className="flex items-center mt-1">
                         {getStatusIcon(order.status)}
-                        <span className="ml-2 capitalize">
-                          {order.status.replace('_', ' ')}
-                        </span>
+                        <span className="ml-2 capitalize">{order.status.replace('_', ' ')}</span>
                       </div>
                     </div>
                   </div>
@@ -132,6 +110,23 @@ const OrderManagement = ({
           </div>
         )}
       </div>
+
+      {showOrderForm && templateId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 relative">
+            <button onClick={() => setShowOrderForm(false)} className="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+              <X size={20} />
+            </button>
+            <DynamicOrderForm
+              templateId={templateId}
+              onSubmit={async (formData) => {
+                await onCreateOrder(formData);
+                setShowOrderForm(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
