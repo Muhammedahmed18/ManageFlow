@@ -7,6 +7,7 @@ import Settings from "./Settings";
 import OrderManagement from "./OrderManagement";
 import api from "../../services/authService";
 import ProductPreviewModal from "../BusinessManager/modals/ProductPreviewModal";
+import DynamicOrderForm from "../BusinessManager/modals/DynamicOrderForm";
 
 const CustomerManager = () => {
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,8 @@ const CustomerManager = () => {
   const [orderTemplate, setOrderTemplate] = useState(null);
   const [invoiceTemplate, setInvoiceTemplate] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [templateId, setTemplateId] = useState(null);
+  const [showOrderForm, setShowOrderForm] = useState(false);
 
   const navigate = useNavigate();
 
@@ -46,6 +49,19 @@ const CustomerManager = () => {
 
     fetchData();
   }, [navigate]);
+
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      try {
+        const res = await api.get("/customer/template-upload/");
+        const template = res.data.find(t => t.template_type === "order");
+        if (template) setTemplateId(template.id);
+      } catch (err) {
+        console.error("Error loading order template", err);
+      }
+    };
+    fetchTemplate();
+  }, []);
 
   const computeFilteredProducts = (products, query) => {
     return products.filter((product) => {
@@ -127,6 +143,7 @@ const CustomerManager = () => {
           userType="customer"
           setActiveTab={setActiveTab}
           navigate={navigate}
+          onPlaceOrderClick={() => setShowOrderForm(true)}
         />
 
         <main className="flex-1 overflow-y-auto">
@@ -203,6 +220,41 @@ const CustomerManager = () => {
               setShowPreview={setShowPreview}
               colors={{ textDark: "#1f2937   " }}
             />
+          )}
+
+          {/* Order Form Modal */}
+          {showOrderForm && templateId && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
+                <div className="flex justify-between items-center px-4 py-3 border-b">
+                  <h3 className="text-lg font-medium text-gray-800">New Order</h3>
+                  <button
+                    onClick={() => setShowOrderForm(false)}
+                    className="text-gray-500 hover:text-gray-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-4">
+                  <DynamicOrderForm
+                    templateId={templateId}
+                    onSubmit={async (formData) => {
+                      try {
+                        await api.post("/customer/orders/", {
+                          template_type: "order",
+                          data: formData
+                        });
+                        alert("Order submitted successfully!");
+                        setShowOrderForm(false);
+                      } catch (err) {
+                        console.error("Failed to submit order", err);
+                        alert("Failed to submit order.");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </main>
       </div>

@@ -102,9 +102,9 @@ class ProductViewSet(viewsets.ModelViewSet):
             if isinstance(data.get('field_values'), str):
                 try:
                     data['field_values'] = json.loads(data['field_values'])
-                    kwargs['data'] = data
-                except Exception:
-                    pass
+                except json.JSONDecodeError:
+                    raise ValidationError({"field_values": "Invalid JSON format"})
+            kwargs['data'] = data
         return super().get_serializer(*args, **kwargs)
 
     def get_serializer_context(self):
@@ -157,19 +157,47 @@ class CustomerProductListView(APIView):
         return Response(serializer.data)
 
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.views import APIView
+
+from .models import TemplateUpload
+from .serializers import TemplateUploadSerializer
+
+import json
+import os
+
 class TemplateUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request):
-        templates = TemplateUpload.objects.filter(uploaded_by=request.user)
+        user = request.user
+
+        # ✅ Manufacturer sees their own uploads
+        if user.role == "manufacturer":
+            templates = TemplateUpload.objects.filter(uploaded_by=user)
+
+        # ✅ Customer sees their manufacturer's uploads
+        elif user.role == "customer":
+            if not user.business or not user.business.manufacturer:
+                return Response({"detail": "Customer is not linked to a manufacturer."}, status=400)
+
+            manufacturer = user.business.manufacturer
+            templates = TemplateUpload.objects.filter(uploaded_by=manufacturer)
+
+        else:
+            return Response({"detail": "Unsupported role."}, status=403)
+
         serializer = TemplateUploadSerializer(templates, many=True)
         return Response(serializer.data)
 
     def post(self, request):
         if request.user.role != "manufacturer":
             return Response({"detail": "Only manufacturers can upload templates."}, 
-                          status=status.HTTP_403_FORBIDDEN)
+                            status=status.HTTP_403_FORBIDDEN)
 
         template_type = request.data.get('template_type')
         file = request.FILES.get('file')
@@ -177,16 +205,16 @@ class TemplateUploadView(APIView):
 
         if not template_type or not file:
             return Response({"detail": "Missing template_type or file."}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+                            status=status.HTTP_400_BAD_REQUEST)
 
         if isinstance(field_mappings, str):
             try:
                 field_mappings = json.loads(field_mappings)
             except json.JSONDecodeError:
                 return Response({"detail": "Invalid JSON format for field_mappings"}, 
-                              status=status.HTTP_400_BAD_REQUEST)
+                                status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete any existing template of the same type for this user
+        # Replace existing template of the same type for the same user
         TemplateUpload.objects.filter(
             uploaded_by=request.user,
             template_type=template_type
@@ -199,6 +227,7 @@ class TemplateUploadView(APIView):
             field_mappings=field_mappings or {}
         )
 
+        # Generate preview image if it's a PDF
         if file.name.lower().endswith('.pdf'):
             self._generate_pdf_preview_image(upload)
 
@@ -207,14 +236,16 @@ class TemplateUploadView(APIView):
 
     def _generate_pdf_preview_image(self, template_obj):
         try:
-            pdf_path = template_obj.file.path
-            print(f"[DEBUG] Converting PDF: {pdf_path}")
+            from pdf2image import convert_from_path
+            from PIL import Image
+            from io import BytesIO
+            from django.core.files.base import ContentFile
 
+            pdf_path = template_obj.file.path
             output_folder = os.path.join("media", "templates", "previews")
             os.makedirs(output_folder, exist_ok=True)
 
-            # Optional: set poppler path if running on Windows
-            poppler_path = poppler_path = r"C:\poppler-24.08.0\Library\bin"
+            poppler_path = r"C:\poppler-24.08.0\Library\bin"  # Use your actual path or remove if not needed
 
             pages = convert_from_path(
                 pdf_path,
@@ -224,7 +255,6 @@ class TemplateUploadView(APIView):
                 poppler_path=poppler_path
             )
 
-            print(f"[DEBUG] Pages returned: {len(pages)}")
             if pages:
                 image = pages[0]
                 buffer = BytesIO()
@@ -232,10 +262,7 @@ class TemplateUploadView(APIView):
                 buffer.seek(0)
 
                 filename = f"preview_{template_obj.id}.png"
-                print(f"[DEBUG] Saving preview image: {filename}")
-
                 template_obj.preview_image.save(filename, ContentFile(buffer.read()), save=True)
-                print(f"[DEBUG] Preview image saved successfully.")
 
         except Exception as e:
             print(f"[ERROR] PDF preview generation failed: {str(e)}")
@@ -245,12 +272,29 @@ class OrderFieldPositionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, template_id):
-        try:
-            template = TemplateUpload.objects.get(id=template_id, uploaded_by=request.user)
-        except TemplateUpload.DoesNotExist:
-            return Response({"detail": "Template not found or unauthorized."}, 
-                           status=status.HTTP_404_NOT_FOUND)
+        user = request.user
 
+        try:
+            template = TemplateUpload.objects.get(id=template_id)
+        except TemplateUpload.DoesNotExist:
+            return Response({"detail": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Manufacturer can access their own templates
+        if user == template.uploaded_by:
+            pass
+
+        # ✅ Customer can access templates from their linked manufacturer
+        elif user.role == "customer":
+            if not user.business or not user.business.manufacturer:
+                return Response({"detail": "Customer not linked to a manufacturer."}, status=status.HTTP_403_FORBIDDEN)
+
+            if user.business.manufacturer != template.uploaded_by:
+                return Response({"detail": "Not authorized to access this template."}, status=status.HTTP_403_FORBIDDEN)
+
+        else:
+            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+
+        # ✅ If passed permission checks, return the placed fields
         positions = OrderFieldPosition.objects.filter(template=template)
         serializer = OrderFieldPositionSerializer(positions, many=True)
         return Response(serializer.data)

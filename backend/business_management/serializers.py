@@ -54,20 +54,13 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         fields_data = validated_data.pop('fields', [])
 
-        existing_fields_by_id = {field.id: field for field in instance.fields.all()}
-        existing_fields_by_key = {
-            (field.label.strip().lower(), field.type): field for field in instance.fields.all()
-        }
-
+        existing_fields = {field.id: field for field in instance.fields.all()}
         incoming_ids = set()
 
         for field_data in fields_data:
             field_id = field_data.get('id')
-            label_type_key = (field_data.get('label', '').strip().lower(), field_data.get('type'))
-
-            field = existing_fields_by_id.get(field_id) or existing_fields_by_key.get(label_type_key)
-
-            if field:
+            if field_id and field_id in existing_fields:
+                field = existing_fields[field_id]
                 if field.type == "currency":
                     new_symbol = field_data.get("currency_symbol")
                     if new_symbol and new_symbol != field.currency_symbol:
@@ -81,6 +74,12 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
             else:
                 new_field = TemplateField.objects.create(template=instance, **field_data)
                 incoming_ids.add(new_field.id)
+
+        # ✅ Safe deletion of removed fields and only their values
+        for field_id, field in existing_fields.items():
+            if field_id not in incoming_ids:
+                field.product_values.all().delete()
+                field.delete()
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -182,7 +181,16 @@ class ProductSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        field_values_data = validated_data.pop('field_values', [])
+        raw_field_values = self.initial_data.get('field_values', [])
+        if isinstance(raw_field_values, str):
+            import json
+            raw_field_values = json.loads(raw_field_values)
+
+        # Validate with nested serializer
+        field_serializer = ProductFieldValueSerializer(data=raw_field_values, many=True)
+        field_serializer.is_valid(raise_exception=True)
+        validated_field_values = field_serializer.validated_data
+
         template = validated_data['template']
         user = self.context['request'].user
 
@@ -191,30 +199,53 @@ class ProductSerializer(serializers.ModelSerializer):
 
         product = Product.objects.create(business=template.business, **validated_data)
 
-        for value_data in field_values_data:
-            ProductFieldValue.objects.create(product=product, **value_data)
+        for value in validated_field_values:
+            ProductFieldValue.objects.create(
+                product=product,
+                field=value['field'],
+                value=value['value']
+            )
 
         return product
 
     def update(self, instance, validated_data):
-        field_values_data = validated_data.pop('field_values', [])
+        raw_field_values = self.initial_data.get('field_values', [])
+        if isinstance(raw_field_values, str):
+            import json
+            raw_field_values = json.loads(raw_field_values)
+
+        field_serializer = ProductFieldValueSerializer(data=raw_field_values, many=True)
+        field_serializer.is_valid(raise_exception=True)
+        validated_field_values = field_serializer.validated_data
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         existing_values = {fv.field.id: fv for fv in instance.field_values.all()}
+        updated_field_ids = set()
 
-        for value_data in field_values_data:
-            field = value_data['field']
+        for value in validated_field_values:
+            field = value['field']
+            updated_field_ids.add(field.id)
             if field.id in existing_values:
-                existing = existing_values[field.id]
-                existing.value = value_data['value']
-                existing.save()
+                fv = existing_values[field.id]
+                fv.value = value['value']
+                fv.save()
             else:
-                ProductFieldValue.objects.create(product=instance, **value_data)
+                ProductFieldValue.objects.create(
+                    product=instance,
+                    field=field,
+                    value=value['value']
+                )
+
+        # Optionally remove any that were not re-submitted
+        for field_id, fv in existing_values.items():
+            if field_id not in updated_field_ids:
+                fv.delete()
 
         return instance
+
 
 
 class TemplateUploadSerializer(serializers.ModelSerializer):
@@ -226,7 +257,7 @@ class TemplateUploadSerializer(serializers.ModelSerializer):
             'template_type',
             'uploaded_at',
             'field_mappings',
-            'preview_image',  # ✅ add this line
+            'preview_image',
         ]
         read_only_fields = ['uploaded_at', 'preview_image']
 

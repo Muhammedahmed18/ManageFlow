@@ -19,7 +19,8 @@ const Header = ({
   colors = { primary: '#3b82f6', secondary: '#dbeafe', textDark: '#1e293b' },
   onLogout,
   setActiveTab,
-  navigate
+  navigate,
+  onPlaceOrderClick
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -124,8 +125,8 @@ const Header = ({
 
   const handleAddClick = () => {
     if (userType === 'customer') {
-      if (activeTab !== 'order') {
-        setActiveTab('order');
+      if (onPlaceOrderClick) {
+        onPlaceOrderClick();
       }
     } else {
       // Manufacturer logic

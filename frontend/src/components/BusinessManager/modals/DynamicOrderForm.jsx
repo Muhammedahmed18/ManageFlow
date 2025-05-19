@@ -8,6 +8,7 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [products, setProducts] = useState([]);
 
   // Fetch field positions
   useEffect(() => {
@@ -35,6 +36,20 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
 
     if (templateId) fetchFields();
   }, [templateId]);
+
+  // Fetch products
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await api.get("/customer/products/");
+        setProducts(res.data);
+      } catch (err) {
+        console.error("Failed to load products", err);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   // Handle field input changes
   const handleChange = (key, value) => {
@@ -103,26 +118,42 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                 {field.required && <span className="ml-1 text-red-500">*</span>}
               </label>
               
-              {field.type === 'textarea' ? (
-                <textarea
-                  name={field.key}
-                  value={formData[field.key] || ''}
+              {(field.label.toLowerCase().includes("product") || field.key === "product") ? (
+                <select
+                  value={formData[field.key]}
                   onChange={(e) => handleChange(field.key, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows={3}
                   required={field.required}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">-- Select Product --</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.name}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
               ) : (
-                <input
-                  type={field.type || 'text'}
-                  name={field.key}
-                  value={formData[field.key] || ''}
-                  onChange={(e) => handleChange(field.key, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required={field.required}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-                />
+                field.type === 'textarea' ? (
+                  <textarea
+                    name={field.key}
+                    value={formData[field.key] || ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={3}
+                    required={field.required}
+                    placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                  />
+                ) : (
+                  <input
+                    type={field.type || 'text'}
+                    name={field.key}
+                    value={formData[field.key] || ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required={field.required}
+                    placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                  />
+                )
               )}
               
               {field.description && (
