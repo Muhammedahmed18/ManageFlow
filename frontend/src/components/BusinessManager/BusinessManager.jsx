@@ -411,17 +411,32 @@ const BusinessManager = () => {
               }
             }}
             onUpdateTemplate={async (templateData) => {
-              try {
-                const response = await api.put(`/product-templates/${templateData.id}/`, templateData);
-                setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
-                setSelectedTemplate(null);
-                setShowAddForm(false);
-              } catch (err) {
-                console.error("Error updating template:", err);
-                throw err;
-              }
-            }}
-            api={api}
+            try {
+              // 🔧 Ensure field IDs are preserved to prevent accidental deletion
+              const updatedTemplate = {
+                ...templateData,
+                fields: templateData.fields.map(field => ({
+                  id: field.id,  // ✅ required for backend to know it's an existing field
+                  label: field.label,
+                  type: field.type,
+                  required: field.required || false,
+                  options: field.options || [],
+                  currency_symbol: field.currency_symbol || "$",
+                  decimal_places: field.decimal_places || 2,
+                  order: field.order || 0
+                }))
+              };
+
+              const response = await api.put(`/product-templates/${templateData.id}/`, updatedTemplate);
+              setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
+              setSelectedTemplate(null);
+              setShowAddForm(false);
+            } catch (err) {
+              console.error("Error updating template:", err);
+              throw err;
+            }
+          }}
+          api={api}
           />
         )}
 

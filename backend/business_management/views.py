@@ -113,16 +113,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_create(self, serializer):
-        instance = serializer.save()
         image = self.request.FILES.get('image')
-        if image:
-            instance.image = image
-            instance.save()
+        serializer.save(image=image)
 
     def perform_update(self, serializer):
         instance = self.get_object()
         old_image = instance.image.path if instance.image else None
-        instance = serializer.save()
+        serializer.save()
+        instance = Product.objects.prefetch_related("field_values__field").get(pk=serializer.instance.pk)
+
 
         new_image = self.request.FILES.get('image')
         if new_image:
@@ -130,6 +129,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             instance.save()
             if old_image and os.path.exists(old_image):
                 os.remove(old_image)
+
 
 
 class CustomerStatusCheckView(APIView):

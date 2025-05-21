@@ -102,7 +102,6 @@ const TemplateModal = ({
 
     const newField = {
       ...currentField,
-      id: Date.now().toString()
     };
     
     if (newField.type !== 'dropdown') {
@@ -212,50 +211,55 @@ const TemplateModal = ({
   };
 
   const handleSave = async () => {
-    if (!validateTemplate()) return;
-  
-    setIsSaving(true);
-    try {
-      const templateData = {
-        ...template,
-        business: parseInt(businessId),
-        fields: template.fields.map(field => {
-          const formatted = {
-            id: field.id,
-            label: field.label,
-            type: field.type,
-            required: field.required || false,
-            order: field.order || 0
-          };
-  
-          if (field.type === 'dropdown') {
-            formatted.options = field.options?.filter(opt => opt.value?.trim()) || [];
-          }
-  
-          if (field.type === 'currency') {
-            formatted.currency_symbol = field.currency_symbol || '$';
-            formatted.decimal_places = typeof field.decimal_places === 'number' ? field.decimal_places : 2;
-          }
-  
-          return formatted;
-        })
-      };
-  
-      if (isEdit) {
-        await onUpdateTemplate(templateData);
-      } else {
-        await onCreateTemplate(templateData);
-      }
-    } catch (error) {
-      console.error("Error saving template:", error);
-      if (error.response?.data) {
-        console.log("Backend validation errors:", error.response.data);
-        setErrors(error.response.data);
-      }
-    } finally {
-      setIsSaving(false);
+  if (!validateTemplate()) return;
+
+  setIsSaving(true);
+  try {
+    const templateData = {
+      ...template,
+      business: parseInt(businessId),
+      fields: template.fields.map(field => {
+        const formatted = {
+          label: field.label,
+          type: field.type,
+          required: field.required || false,
+          order: field.order || 0
+        };
+
+        // ✅ Only include `id` if it's a real number (from backend)
+        if (Number.isInteger(field.id)) {
+          formatted.id = field.id;
+        }
+
+        if (field.type === 'dropdown') {
+          formatted.options = field.options?.filter(opt => opt.value?.trim()) || [];
+        }
+
+        if (field.type === 'currency') {
+          formatted.currency_symbol = field.currency_symbol || '$';
+          formatted.decimal_places = typeof field.decimal_places === 'number' ? field.decimal_places : 2;
+        }
+
+        return formatted;
+      })
+    };
+
+    if (isEdit) {
+      await onUpdateTemplate(templateData);
+    } else {
+      await onCreateTemplate(templateData);
     }
-  };
+  } catch (error) {
+    console.error("Error saving template:", error);
+    if (error.response?.data) {
+      console.log("Backend validation errors:", error.response.data);
+      setErrors(error.response.data);
+    }
+  } finally {
+    setIsSaving(false);
+  }
+};
+
 
   const handleClose = () => {
     setShowAddForm(false);

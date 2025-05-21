@@ -175,20 +175,24 @@ const ProductModal = ({
 
   // Handle image selection
   const handleImageSelect = (e) => {
-    const file = e.target.files?.[0] || e.dataTransfer?.files?.[0];
-    if (file && file.type.match('image.*')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          image: file,
-          imagePreview: reader.result
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-    setIsDragging(false);
-  };
+  // Prevent re-select if image is already chosen
+  if (formData.image && formData.imagePreview) return;
+
+  const file = e.target.files?.[0] || e.dataTransfer?.files?.[0];
+  if (file && file.type.match('image.*')) {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => ({
+        ...prev,
+        image: file,
+        imagePreview: reader.result
+      }));
+    };
+    reader.readAsDataURL(file);
+  }
+  setIsDragging(false);
+};
+
 
   // Drag and drop handlers
   const handleDragOver = (e) => {
@@ -419,7 +423,6 @@ const ProductModal = ({
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      onClick={triggerFileInput}
                     >
                       {formData.imagePreview ? (
                         <>

@@ -54,37 +54,65 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         fields_data = validated_data.pop('fields', [])
 
-        existing_fields = {field.id: field for field in instance.fields.all()}
-        incoming_ids = set()
+        if not isinstance(fields_data, list):
+            raise serializers.ValidationError({"fields": "Invalid format: fields must be a list"})
+
+        # Create mappings for existing fields
+        existing_fields_by_id = {field.id: field for field in instance.fields.all()}
+        existing_fields_by_label_type = {
+            (field.label.strip().lower(), field.type): field 
+            for field in instance.fields.all()
+        }
+        processed_field_ids = set()
 
         for field_data in fields_data:
             field_id = field_data.get('id')
-            if field_id and field_id in existing_fields:
-                field = existing_fields[field_id]
-                if field.type == "currency":
+            matched_field = None
+
+            # First try to match by ID if provided
+            if field_id and field_id in existing_fields_by_id:
+                matched_field = existing_fields_by_id[field_id]
+            
+            # Fallback to matching by label and type if no ID or not found by ID
+            elif not field_id or field_id not in existing_fields_by_id:
+                label = field_data.get('label', '').strip().lower()
+                field_type = field_data.get('type')
+                matched_field = existing_fields_by_label_type.get((label, field_type))
+
+            # If we found a match, update it
+            if matched_field:
+                # Special handling for currency fields
+                if matched_field.type == "currency":
                     new_symbol = field_data.get("currency_symbol")
-                    if new_symbol and new_symbol != field.currency_symbol:
+                    if new_symbol and new_symbol != matched_field.currency_symbol:
                         raise serializers.ValidationError({
-                            "currency_symbol": f"Currency symbol is locked as '{field.currency_symbol}'."
+                            "currency_symbol": f"Currency symbol is locked as '{matched_field.currency_symbol}'."
                         })
+
+                # Update all other attributes
                 for attr, value in field_data.items():
-                    setattr(field, attr, value)
-                field.save()
-                incoming_ids.add(field.id)
+                    if attr != 'id':  # Don't allow changing the ID
+                        setattr(matched_field, attr, value)
+                matched_field.save()
+                processed_field_ids.add(matched_field.id)
+            
+            # No match found - create new field
             else:
                 new_field = TemplateField.objects.create(template=instance, **field_data)
-                incoming_ids.add(new_field.id)
+                processed_field_ids.add(new_field.id)
 
-        # ✅ Safe deletion of removed fields and only their values
-        for field_id, field in existing_fields.items():
-            if field_id not in incoming_ids:
-                field.product_values.all().delete()
-                field.delete()
+        # Delete fields that weren't included in the update (optional)
+        fields_to_delete = instance.fields.exclude(id__in=processed_field_ids)
+        if fields_to_delete.exists():
+            fields_to_delete.delete()
 
+        # Update template-level attributes
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
         return instance
+
 
 
 class ProductCategorySerializer(serializers.ModelSerializer):
@@ -239,13 +267,7 @@ class ProductSerializer(serializers.ModelSerializer):
                     value=value['value']
                 )
 
-        # Optionally remove any that were not re-submitted
-        for field_id, fv in existing_values.items():
-            if field_id not in updated_field_ids:
-                fv.delete()
-
         return instance
-
 
 
 class TemplateUploadSerializer(serializers.ModelSerializer):
