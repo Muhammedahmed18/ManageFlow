@@ -107,6 +107,27 @@ const CustomerManager = () => {
     }
   };
 
+  const handleLogout = async () => {
+  const refresh = sessionStorage.getItem("refreshToken");
+  const token = sessionStorage.getItem("accessToken");
+
+  try {
+    if (refresh && token) {
+      await api.post("/auth/logout/", { refresh }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("Logout error:", err);
+  }
+
+  sessionStorage.clear();
+  navigate("/login");
+};
+
+
   if (loading) {
     return (
       <div className="p-10 text-center">
@@ -144,6 +165,7 @@ const CustomerManager = () => {
           setActiveTab={setActiveTab}
           navigate={navigate}
           onPlaceOrderClick={() => setShowOrderForm(true)}
+          onLogout={handleLogout}
         />
 
         <main className="flex-1 overflow-y-auto">
