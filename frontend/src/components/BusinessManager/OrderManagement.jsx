@@ -1,33 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, 
-  Calendar, Package, Check, Clock, Truck, X, Plus
+  Calendar, Package, Check, Clock, Truck
 } from 'lucide-react';
-import DynamicOrderForm from './modals/DynamicOrderForm';
-import api from '../../services/authService';
 
 const OrderManagement = ({ 
   orders, 
-  onCreateOrder,
   colors 
 }) => {
   const [expandedOrder, setExpandedOrder] = useState(null);
-  const [showOrderForm, setShowOrderForm] = useState(false);
-  const [templateId, setTemplateId] = useState(null);
-
-  useEffect(() => {
-    const fetchTemplate = async () => {
-      try {
-        const res = await api.get('/template-upload/');
-        if (res.data && res.data.length > 0) {
-          setTemplateId(res.data[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to fetch template:', err);
-      }
-    };
-    fetchTemplate();
-  }, []);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -47,14 +28,6 @@ const OrderManagement = ({
     <div className="p-6 bg-white rounded-lg shadow-md">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800">Order Management</h2>
-        <button 
-          onClick={() => setShowOrderForm(true)}
-          className="flex items-center px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Plus size={16} className="mr-2" />
-          New Order
-        </button>
       </div>
 
       <div className="mt-8">
@@ -110,23 +83,6 @@ const OrderManagement = ({
           </div>
         )}
       </div>
-
-      {showOrderForm && templateId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 relative">
-            <button onClick={() => setShowOrderForm(false)} className="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
-              <X size={20} />
-            </button>
-            <DynamicOrderForm
-              templateId={templateId}
-              onSubmit={async (formData) => {
-                await onCreateOrder(formData);
-                setShowOrderForm(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

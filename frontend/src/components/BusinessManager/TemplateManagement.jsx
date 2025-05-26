@@ -119,7 +119,6 @@ const TemplateManagement = ({
                           >
                             {template.name}
                           </button>
-                          <div className="text-xs" style={{ color: colors.textMedium }}>ID: {template.id}</div>
                         </div>
                       </div>
                     </td>
