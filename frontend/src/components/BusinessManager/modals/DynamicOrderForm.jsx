@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../../services/authService'; // adjust path as needed
-import { ClipLoader } from 'react-spinners'; // for loading animation
+import api from '../../../services/authService';
+import { ClipLoader } from 'react-spinners';
 
 const DynamicOrderForm = ({ templateId, onSubmit }) => {
   const [fields, setFields] = useState([]);
@@ -9,8 +9,8 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Fetch field positions
   useEffect(() => {
     const fetchFields = async () => {
       try {
@@ -18,14 +18,11 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
         setLoading(true);
         const response = await api.get(`/template-upload/${templateId}/positions/`);
         setFields(response.data || []);
-        
-        // Initialize form data with empty values for each field
         const initialData = {};
         response.data.forEach(field => {
           initialData[field.key] = '';
         });
         setFormData(initialData);
-        
       } catch (err) {
         console.error("Failed to load template fields", err);
         setError("Failed to load form fields. Please try again.");
@@ -37,7 +34,6 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
     if (templateId) fetchFields();
   }, [templateId]);
 
-  // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -51,19 +47,37 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
     fetchProducts();
   }, []);
 
-  // Handle field input changes
+  useEffect(() => {
+    if (selectedProduct && Array.isArray(selectedProduct.field_values)) {
+      const updates = {};
+      fields.forEach(field => {
+        const formLabel = field.label.toLowerCase().trim();
+        selectedProduct.field_values.forEach(item => {
+          const productLabel = item.field?.label?.toLowerCase().trim();
+          if (formLabel === productLabel) {
+            updates[field.key] = item.value;
+          }
+        });
+      });
+      console.log("Auto-filling with:", updates);
+      setFormData(prev => ({ ...prev, ...updates }));
+    }
+  }, [selectedProduct, fields]);
+
   const handleChange = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+    if (key === "product" || key.toLowerCase().includes("product")) {
+      const matched = products.find(p => p.name === value);
+      console.log("Selected product object:", matched);
+      setSelectedProduct(matched || null);
+    }
   };
 
-  // Submit form data
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (onSubmit) {
-        await onSubmit(formData);  // send back to parent
-      }
+      if (onSubmit) await onSubmit(formData);
     } catch (err) {
       console.error("Submission error", err);
       setError("Failed to submit form. Please try again.");
@@ -84,12 +98,10 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   if (error) {
     return (
       <div className="p-6 bg-white rounded-lg shadow-sm">
-        <div className="p-4 mb-4 text-red-700 bg-red-100 rounded-md">
-          {error}
-        </div>
+        <div className="p-4 mb-4 text-red-700 bg-red-100 rounded-md">{error}</div>
         <button
           onClick={() => window.location.reload()}
-          className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
         >
           Retry
         </button>
@@ -108,7 +120,6 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   return (
     <div className="p-6 bg-white rounded-lg shadow-md">
       <h2 className="mb-6 text-2xl font-semibold text-gray-800">Order Form</h2>
-      
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {fields.map(field => (
@@ -117,13 +128,12 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                 {field.label}
                 {field.required && <span className="ml-1 text-red-500">*</span>}
               </label>
-              
               {(field.label.toLowerCase().includes("product") || field.key === "product") ? (
                 <select
                   value={formData[field.key]}
                   onChange={(e) => handleChange(field.key, e.target.value)}
                   required={field.required}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
                   <option value="">-- Select Product --</option>
                   {products.map(product => (
@@ -138,7 +148,7 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                     name={field.key}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     rows={3}
                     required={field.required}
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
@@ -149,13 +159,12 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                     name={field.key}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     required={field.required}
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                   />
                 )
               )}
-              
               {field.description && (
                 <p className="text-xs text-gray-500">{field.description}</p>
               )}
@@ -164,21 +173,18 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
         </div>
 
         {error && (
-          <div className="p-3 text-red-700 bg-red-100 rounded-md">
-            {error}
-          </div>
+          <div className="p-3 text-red-700 bg-red-100 rounded-md">{error}</div>
         )}
 
         <div className="flex justify-end">
           <button
             type="submit"
             disabled={submitting}
-            className="flex items-center px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-70"
+            className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
           >
             {submitting ? (
               <>
-                <ClipLoader size={20} color="#ffffff" className="mr-2" />
-                Processing...
+                <ClipLoader size={20} color="#ffffff" className="mr-2" /> Processing...
               </>
             ) : (
               'Submit Order'
