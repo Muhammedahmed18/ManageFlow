@@ -265,10 +265,11 @@ const Settings = () => {
               </button>
             </div>
             <div className="p-4 overflow-auto flex-1">
-              <div className="mb-4">
-                <p className="text-sm text-gray-500">
-                  Click anywhere on the form to add a new field
-                </p>
+              <div className="mb-4 text-sm text-gray-500">
+                Click anywhere on the form to add a new field.
+              </div>
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                🔗 <strong>Auto-fill Tip:</strong> Use field labels like <code>Price</code>, <code>Material</code>, or <code>Size</code> to auto-fill data from the product template. Matching labels will automatically populate when a customer selects a product.
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <FieldPlacer
@@ -277,8 +278,7 @@ const Settings = () => {
                 />
               </div>
             </div>
-            <div className="p-4 border-t flex justify-end">\
-            </div>
+            <div className="p-4 border-t flex justify-end"></div>
           </div>
         </div>
       )}

@@ -9,9 +9,9 @@ const FieldPlacer = ({ templateId, templateImageUrl }) => {
   const [fieldLabel, setFieldLabel] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [productFields, setProductFields] = useState(['price', 'material', 'size']);
   const imageRef = useRef(null);
 
-  // Fetch existing fields when component mounts
   useEffect(() => {
     const fetchExistingFields = async () => {
       try {
@@ -32,14 +32,13 @@ const FieldPlacer = ({ templateId, templateImageUrl }) => {
 
   const handleImageClick = (e) => {
     if (isLoading) return;
-    
     const img = imageRef.current;
     if (!img) return;
 
     const rect = img.getBoundingClientRect();
     const scaleX = img.naturalWidth / rect.width;
     const scaleY = img.naturalHeight / rect.height;
-    
+
     const clickX = (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
 
@@ -84,6 +83,8 @@ const FieldPlacer = ({ templateId, templateImageUrl }) => {
       alert(`Failed to delete field: ${err.response?.data?.message || err.message}`);
     }
   };
+
+  const isMatchingProductField = productFields.includes(fieldLabel.toLowerCase().trim());
 
   if (isLoading) {
     return (
@@ -166,10 +167,15 @@ const FieldPlacer = ({ templateId, templateImageUrl }) => {
               value={fieldLabel}
               onChange={(e) => setFieldLabel(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="e.g., Order ID"
+              placeholder="e.g., Price"
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleAddField()}
             />
+            <p className={`mt-1 text-xs ${isMatchingProductField ? 'text-green-600' : 'text-red-500'}`}>
+              {isMatchingProductField
+                ? '✅ This field will auto-fill from product data.'
+                : '⚠️ This field does not match any product data field.'}
+            </p>
           </div>
           <div className="flex justify-end space-x-2">
             <button
