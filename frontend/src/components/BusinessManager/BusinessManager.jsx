@@ -13,7 +13,6 @@ import PreviewModal from './modals/PreviewModal';
 import AddChoiceModal from './modals/AddChoiceModal';
 import CategoryModal from './modals/CategoryModal';
 import OrderManagement from './OrderManagement';
-import DynamicOrderForm from './modals/DynamicOrderForm';
 import api from '../../services/authService';
 import CustomerManagement from './CustomerManagement';
 import { FileText, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
@@ -43,8 +42,6 @@ const BusinessManager = () => {
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [pendingCustomers, setPendingCustomers] = useState([]);
-  const [selectedTemplateForOrder, setSelectedTemplateForOrder] = useState(null);
-  const [showOrderForm, setShowOrderForm] = useState(false);
 
   const colors = {
     primary: "#1C2E4A",
@@ -190,24 +187,6 @@ const BusinessManager = () => {
     }
   };
 
-  const handleCreateOrder = async (formData) => {
-    setIsSaving(true);
-    try {
-      const response = await api.post('/customer/orders/', {
-        template_type: 'order',
-        data: formData
-      });
-      setOrders([response.data, ...orders]);
-      setShowOrderForm(false);
-      return response.data;
-    } catch (err) {
-      console.error("Error creating order:", err);
-      throw err;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar
@@ -237,8 +216,6 @@ const BusinessManager = () => {
             } else if (activeTab === 'products') {
               setSelectedProduct(null);
               setShowAddChoiceModal(true);
-            } else if (activeTab === 'orders') {
-              setShowOrderForm(true);
             }
           }}
           products={products}
@@ -328,12 +305,10 @@ const BusinessManager = () => {
           />
         )}
 
-        {activeTab === "orders" && !showOrderForm && (
+        {activeTab === "orders" && (
           <OrderManagement
             templates={templates}
             orders={orders}
-            onSelectTemplate={setSelectedTemplateForOrder}
-            onCreateOrder={() => setShowOrderForm(true)}
             colors={colors}
           />
         )}
@@ -411,32 +386,31 @@ const BusinessManager = () => {
               }
             }}
             onUpdateTemplate={async (templateData) => {
-            try {
-              // 🔧 Ensure field IDs are preserved to prevent accidental deletion
-              const updatedTemplate = {
-                ...templateData,
-                fields: templateData.fields.map(field => ({
-                  id: field.id,  // ✅ required for backend to know it's an existing field
-                  label: field.label,
-                  type: field.type,
-                  required: field.required || false,
-                  options: field.options || [],
-                  currency_symbol: field.currency_symbol || "$",
-                  decimal_places: field.decimal_places || 2,
-                  order: field.order || 0
-                }))
-              };
+              try {
+                const updatedTemplate = {
+                  ...templateData,
+                  fields: templateData.fields.map(field => ({
+                    id: field.id,
+                    label: field.label,
+                    type: field.type,
+                    required: field.required || false,
+                    options: field.options || [],
+                    currency_symbol: field.currency_symbol || "$",
+                    decimal_places: field.decimal_places || 2,
+                    order: field.order || 0
+                  }))
+                };
 
-              const response = await api.put(`/product-templates/${templateData.id}/`, updatedTemplate);
-              setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
-              setSelectedTemplate(null);
-              setShowAddForm(false);
-            } catch (err) {
-              console.error("Error updating template:", err);
-              throw err;
-            }
-          }}
-          api={api}
+                const response = await api.put(`/product-templates/${templateData.id}/`, updatedTemplate);
+                setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
+                setSelectedTemplate(null);
+                setShowAddForm(false);
+              } catch (err) {
+                console.error("Error updating template:", err);
+                throw err;
+              }
+            }}
+            api={api}
           />
         )}
 
@@ -480,35 +454,6 @@ const BusinessManager = () => {
             setIsSaving={setIsSaving}
             colors={colors}
           />
-        )}
-
-        {showOrderForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">
-                  <FileText className="inline mr-2" size={20} />
-                  New Order Form
-                </h3>
-                <button 
-                  onClick={() => setShowOrderForm(false)}
-                  className="p-1 rounded-full hover:bg-gray-100"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              {templates.filter(t => t.template_type === "order").sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at))[0] ? (
-                <DynamicOrderForm
-                  templateId={templates.filter(t => t.template_type === "order").sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at))[0].id}
-                  onSubmit={handleCreateOrder}
-                />
-              ) : (
-                <div className="p-6 text-red-600">
-                  No order template found. Please upload and place fields first.
-                </div>
-              )}
-            </div>
-          </div>
         )}
 
         {showPreview && previewItem && productSubTab === "products" && (
