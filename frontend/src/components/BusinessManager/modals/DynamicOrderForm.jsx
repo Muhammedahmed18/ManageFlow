@@ -120,7 +120,7 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   return (
     <div className="p-6 bg-white rounded-lg shadow-md">
       <h2 className="mb-6 text-2xl font-semibold text-gray-800">Order Form</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form autoComplete="on" onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {fields.map(field => (
             <div key={field.key} className="space-y-1">
@@ -130,6 +130,8 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
               </label>
               {(field.label.toLowerCase().includes("product") || field.key === "product") ? (
                 <select
+                  name={field.key}
+                  autoComplete="on"
                   value={formData[field.key]}
                   onChange={(e) => handleChange(field.key, e.target.value)}
                   required={field.required}
@@ -146,6 +148,7 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                 field.type === 'textarea' ? (
                   <textarea
                     name={field.key}
+                    autoComplete="on"
                     value={formData[field.key] || ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -157,6 +160,7 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
                   <input
                     type={field.type || 'text'}
                     name={field.key}
+                    autoComplete="on"
                     value={formData[field.key] || ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
