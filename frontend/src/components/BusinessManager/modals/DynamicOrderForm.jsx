@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../../services/authService';
 import { ClipLoader } from 'react-spinners';
 
-const DynamicOrderForm = ({ templateId, onSubmit }) => {
+const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = false }) => {
   const [fields, setFields] = useState([]);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -12,17 +12,20 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   useEffect(() => {
+    if (!templateId) return;
     const fetchFields = async () => {
       try {
         setError(null);
         setLoading(true);
         const response = await api.get(`/template-upload/${templateId}/positions/`);
-        setFields(response.data || []);
-        const initialData = {};
-        response.data.forEach(field => {
-          initialData[field.key] = '';
+        const fetchedFields = response.data || [];
+        setFields(fetchedFields);
+
+        const initialForm = {};
+        fetchedFields.forEach(field => {
+          initialForm[field.key] = isEdit ? (initialData[field.key] || '') : '';
         });
-        setFormData(initialData);
+        setFormData(initialForm);
       } catch (err) {
         console.error("Failed to load template fields", err);
         setError("Failed to load form fields. Please try again.");
@@ -31,8 +34,8 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
       }
     };
 
-    if (templateId) fetchFields();
-  }, [templateId]);
+    fetchFields();
+  }, [templateId, initialData, isEdit]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -48,27 +51,37 @@ const DynamicOrderForm = ({ templateId, onSubmit }) => {
   }, []);
 
   useEffect(() => {
-    if (selectedProduct && Array.isArray(selectedProduct.field_values)) {
+    if (isEdit && initialData && initialData.product && products.length > 0) {
+      const matched = products.find(p => p.name === initialData.product);
+      setSelectedProduct(matched || null);
+    }
+  }, [products, initialData, isEdit]);
+
+  useEffect(() => {
+    if (!isEdit && selectedProduct && Array.isArray(selectedProduct.field_values) && fields.length > 0) {
       const updates = {};
       fields.forEach(field => {
         const formLabel = field.label.toLowerCase().trim();
         selectedProduct.field_values.forEach(item => {
           const productLabel = item.field?.label?.toLowerCase().trim();
-          if (formLabel === productLabel) {
-            updates[field.key] = item.value;
+          const key = field.key;
+          if (!formData[key] || formData[key] === '') {
+            if (formLabel === productLabel) {
+              updates[key] = item.value;
+            }
           }
         });
       });
-      console.log("Auto-filling with:", updates);
-      setFormData(prev => ({ ...prev, ...updates }));
+      if (Object.keys(updates).length > 0) {
+        setFormData(prev => ({ ...prev, ...updates }));
+      }
     }
-  }, [selectedProduct, fields]);
+  }, [selectedProduct, fields, isEdit]);
 
   const handleChange = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }));
     if (key === "product" || key.toLowerCase().includes("product")) {
       const matched = products.find(p => p.name === value);
-      console.log("Selected product object:", matched);
       setSelectedProduct(matched || null);
     }
   };

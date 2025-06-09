@@ -1,5 +1,6 @@
 from rest_framework import viewsets, generics, status
 from rest_framework.views import APIView
+from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
@@ -9,7 +10,7 @@ import json
 import os
 from io import BytesIO
 
-from .models import ProductTemplate, Product, ProductCategory, TemplateUpload, OrderFieldPosition
+from .models import ProductTemplate, Product, ProductCategory, TemplateUpload, OrderFieldPosition, Order
 from .serializers import (
     ProductTemplateSerializer,
     ProductSerializer,
@@ -155,19 +156,6 @@ class CustomerProductListView(APIView):
         products = Product.objects.filter(business=user.business)
         serializer = ProductSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)
-
-
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.views import APIView
-
-from .models import TemplateUpload
-from .serializers import TemplateUploadSerializer
-
-import json
-import os
 
 class TemplateUploadView(APIView):
     permission_classes = [IsAuthenticated]
@@ -319,9 +307,33 @@ class OrderFieldPositionView(APIView):
 class CustomerOrderView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        user = request.user
+        if not user.business:
+            return Response({"detail": "Customer is not linked to any business"}, status=400)
+
+        orders = Order.objects.filter(customer=user).order_by("-created_at")
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
+
     def post(self, request):
         serializer = OrderSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             order = serializer.save()
             return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class CustomerOrderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, order_id):
+        order = get_object_or_404(Order, id=order_id, customer=request.user)
+
+        if order.status != "pending":
+            return Response({"detail": "Only pending orders can be edited."}, status=400)
+
+        serializer = OrderSerializer(order, data=request.data, partial=True, context={"request": request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=200)
+        return Response(serializer.errors, status=400)

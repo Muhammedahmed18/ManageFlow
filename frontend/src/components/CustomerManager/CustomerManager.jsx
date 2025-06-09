@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from 'react-hot-toast';
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Dashboard from "./Dashboard";
@@ -23,6 +24,9 @@ const CustomerManager = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [templateId, setTemplateId] = useState(null);
   const [showOrderForm, setShowOrderForm] = useState(false);
+
+  // ✅ This is the missing state for order list refresh
+  const [orderListRefreshKey, setOrderListRefreshKey] = useState(0);
 
   const navigate = useNavigate();
 
@@ -232,7 +236,7 @@ const CustomerManager = () => {
             />
           )}
 
-          {activeTab === "order" && <OrderManagement />}
+          {activeTab === "orders" && <OrderManagement key={orderListRefreshKey} />}
 
           {/* Product Preview Modal */}
           {showPreview && previewProduct && (
@@ -260,17 +264,20 @@ const CustomerManager = () => {
                 <div className="p-4">
                   <DynamicOrderForm
                     templateId={templateId}
+                    isEdit={false}
+                    initialData={{}}
                     onSubmit={async (formData) => {
                       try {
                         await api.post("/customer/orders/", {
                           template_type: "order",
                           data: formData
                         });
-                        alert("Order submitted successfully!");
+                        toast.success("Order submitted successfully!");
                         setShowOrderForm(false);
+                        setOrderListRefreshKey(prev => prev + 1); // 🔁 trigger refresh
                       } catch (err) {
                         console.error("Failed to submit order", err);
-                        alert("Failed to submit order.");
+                        toast.error("Failed to submit order.");
                       }
                     }}
                   />

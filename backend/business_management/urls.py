@@ -8,7 +8,8 @@ from .views import (
     CustomerProductListView,
     TemplateUploadView,
     CustomerOrderView,
-    OrderFieldPositionView
+    OrderFieldPositionView,
+    CustomerOrderDetailView
 )
 
 from django.conf import settings
@@ -26,6 +27,7 @@ urlpatterns = [
     path('auth/customer-status/', CustomerStatusCheckView.as_view()),
     path('customer/products/', CustomerProductListView.as_view()),
     path('customer/orders/', CustomerOrderView.as_view()),
+    path('customer/orders/<int:order_id>/', CustomerOrderDetailView.as_view()),
 
     # Template upload + field positions
     path('template-upload/', TemplateUploadView.as_view()),
