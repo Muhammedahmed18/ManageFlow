@@ -10,7 +10,7 @@ import json
 import os
 from io import BytesIO
 
-from .models import ProductTemplate, Product, ProductCategory, TemplateUpload, OrderFieldPosition, Order
+from .models import ProductTemplate, Product, ProductCategory, TemplateUpload, OrderFieldPosition, Order, OrderNumberConfig, Business
 from .serializers import (
     ProductTemplateSerializer,
     ProductSerializer,
@@ -337,3 +337,96 @@ class CustomerOrderDetailView(APIView):
             serializer.save()
             return Response(serializer.data, status=200)
         return Response(serializer.errors, status=400)
+
+    def delete(self, request, order_id):
+        order = get_object_or_404(Order, id=order_id, customer=request.user)
+        
+        if order.status != "pending":
+            return Response(
+                {"detail": "Only pending orders can be deleted."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        order.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class OrderNumberConfigView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if not user.business:
+            return Response({"detail": "Business not found"}, status=400)
+
+        config, created = OrderNumberConfig.objects.get_or_create(
+            business=user.business,
+            defaults={'start_number': 1, 'current_number': 1}
+        )
+        
+        return Response({
+            'start_number': config.start_number,
+            'current_number': config.current_number,
+            'prefix': config.prefix
+        })
+
+    def post(self, request):
+        user = request.user
+        if not user.business:
+            return Response({"detail": "Business not found"}, status=400)
+
+        start_number = request.data.get('start_number')
+        prefix = request.data.get('prefix', '')
+
+        if not start_number or not isinstance(start_number, int):
+            return Response({"detail": "Invalid start number"}, status=400)
+
+        config, created = OrderNumberConfig.objects.get_or_create(
+            business=user.business
+        )
+
+        config.start_number = start_number
+        config.current_number = start_number
+        config.prefix = prefix
+        config.save()
+
+        return Response({
+            'start_number': config.start_number,
+            'current_number': config.current_number,
+            'prefix': config.prefix
+        })
+
+class ManufacturerOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        business_id = request.query_params.get('business')
+        
+        if not business_id:
+            return Response({"detail": "Business ID is required"}, status=400)
+
+        try:
+            business = Business.objects.get(id=business_id, manufacturer=user)
+        except Business.DoesNotExist:
+            return Response({"detail": "Business not found"}, status=404)
+
+        orders = Order.objects.filter(business=business).order_by("-created_at")
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
+
+class ManufacturerOrderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, order_id):
+        user = request.user
+        try:
+            order = Order.objects.get(id=order_id, business__manufacturer=user)
+        except Order.DoesNotExist:
+            return Response({"detail": "Order not found."}, status=404)
+
+        status = request.data.get('status')
+        if status and status in dict(Order.STATUS_CHOICES):
+            order.status = status
+            order.save()
+            return Response({"detail": "Order status updated."})
+        return Response({"detail": "Invalid status."}, status=400)

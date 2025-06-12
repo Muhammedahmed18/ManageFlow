@@ -9,7 +9,10 @@ from .views import (
     TemplateUploadView,
     CustomerOrderView,
     OrderFieldPositionView,
-    CustomerOrderDetailView
+    CustomerOrderDetailView,
+    OrderNumberConfigView,
+    ManufacturerOrderView,
+    ManufacturerOrderDetailView
 )
 
 from django.conf import settings
@@ -28,6 +31,7 @@ urlpatterns = [
     path('customer/products/', CustomerProductListView.as_view()),
     path('customer/orders/', CustomerOrderView.as_view()),
     path('customer/orders/<int:order_id>/', CustomerOrderDetailView.as_view()),
+    path('customer/order-number-config/', OrderNumberConfigView.as_view()),
 
     # Template upload + field positions
     path('template-upload/', TemplateUploadView.as_view()),
@@ -35,6 +39,10 @@ urlpatterns = [
 
     # Legacy (optional)
     path('customer/template-upload/', TemplateUploadView.as_view()),
+
+    # Manufacturer API
+    path('manufacturer/orders/', ManufacturerOrderView.as_view()),
+    path('manufacturer/orders/<int:order_id>/', ManufacturerOrderDetailView.as_view()),
 
     # Include DRF router
 ] + router.urls + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

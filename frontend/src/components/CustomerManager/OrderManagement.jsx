@@ -13,12 +13,16 @@ import {
   FiDownload,
   FiChevronDown,
   FiChevronUp,
-  FiInfo
+  FiInfo,
+  FiEdit2,
+  FiTrash2
 } from "react-icons/fi";
 import { FaBoxOpen, FaCheck } from "react-icons/fa";
 import { CSVLink } from "react-csv";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import DynamicOrderForm from "../BusinessManager/modals/DynamicOrderForm";
+import toast from 'react-hot-toast';
 
 const OrderManagement = () => {
   const [loading, setLoading] = useState(true);
@@ -27,10 +31,16 @@ const OrderManagement = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [newOrderConfirmed, setNewOrderConfirmed] = useState(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [templateId, setTemplateId] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
+        setLoading(true);
         const res = await api.get("/customer/orders/");
         setOrders(res.data);
         
@@ -44,11 +54,33 @@ const OrderManagement = () => {
         }
       } catch (err) {
         console.error("Failed to fetch customer orders", err);
+        const errorMessage = err.response?.data?.detail || "Failed to load orders. Please try again.";
+        toast.error(errorMessage, {
+          duration: 5000,
+          position: 'top-right',
+          style: {
+            background: '#EF4444',
+            color: '#fff',
+          },
+        });
       } finally {
         setLoading(false);
       }
     };
     fetchOrders();
+  }, []);
+
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      try {
+        const res = await api.get("/customer/template-upload/");
+        const template = res.data.find(t => t.template_type === "order");
+        if (template) setTemplateId(template.id);
+      } catch (err) {
+        console.error("Error loading order template", err);
+      }
+    };
+    fetchTemplate();
   }, []);
 
   // Format date to relative time or specific format
@@ -164,38 +196,111 @@ const OrderManagement = () => {
     }
   };
 
+  const handleEditOrder = (order) => {
+    setEditingOrder(order);
+    setShowEditForm(true);
+  };
+
+  const canEditOrder = (status) => {
+    // Only allow editing if the order is in 'pending' status
+    return status === 'pending';
+  };
+
+  const handleEditSubmit = async (formData) => {
+    try {
+      await api.patch(`/customer/orders/${editingOrder.id}/`, {
+        template_type: "order",
+        data: formData
+      });
+      
+      // Refresh orders after successful edit
+      const res = await api.get("/customer/orders/");
+      setOrders(res.data);
+      setShowEditForm(false);
+      setEditingOrder(null);
+      
+      // Show success toast
+      toast.success('Order updated successfully!', {
+        duration: 4000,
+        position: 'top-right',
+        style: {
+          background: '#10B981',
+          color: '#fff',
+        },
+      });
+    } catch (err) {
+      console.error("Failed to update order", err);
+      // Show error toast
+      toast.error('Failed to update order. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+        style: {
+          background: '#EF4444',
+          color: '#fff',
+        },
+      });
+    }
+  };
+
+  const handleDeleteClick = (order) => {
+    setOrderToDelete(order);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete) return;
+
+    const toastId = toast.loading('Deleting order...', {
+      position: 'top-right',
+      duration: 5000,
+    });
+
+    try {
+      await api.delete(`/customer/orders/${orderToDelete.id}/`);
+      
+      // Refresh orders after successful deletion
+      const res = await api.get("/customer/orders/");
+      setOrders(res.data);
+      
+      // Update toast to success
+      toast.success('Order deleted successfully!', {
+        id: toastId,
+        position: 'top-right',
+        duration: 4000,
+        style: {
+          background: '#10B981',
+          color: '#fff',
+          borderRadius: '8px',
+          padding: '16px',
+        },
+        icon: '🗑️',
+      });
+    } catch (err) {
+      console.error("Failed to delete order", err);
+      // Update toast to error
+      toast.error('Failed to delete order. Please try again.', {
+        id: toastId,
+        position: 'top-right',
+        duration: 4000,
+        style: {
+          background: '#EF4444',
+          color: '#fff',
+          borderRadius: '8px',
+          padding: '16px',
+        },
+        icon: '❌',
+      });
+    } finally {
+      setShowDeleteModal(false);
+      setOrderToDelete(null);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-          <div className="flex items-center">
-            <FaBoxOpen className="text-2xl text-indigo-600 mr-3" />
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Your Orders</h1>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3">
-            <CSVLink 
-              data={filteredOrders.map(order => ({
-                "Order ID": order.id,
-                "Product": order.data?.product || "N/A",
-                "Status": getStatusText(order.status),
-                "Order Date": new Date(order.created_at).toLocaleDateString(),
-                "Return Date": order.data?.return_date || "N/A",
-                "Sent By": order.data?.sent_by || "N/A"
-              }))} 
-              filename={"orders.csv"}
-              className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <FiDownload className="mr-2" /> Export CSV
-            </CSVLink>
-            
-            <button 
-              onClick={exportToPDF}
-              className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <FiDownload className="mr-2" /> Export PDF
-            </button>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800">Order Management</h1>
         </div>
 
         {/* Search and Filter Bar */}
@@ -276,8 +381,26 @@ const OrderManagement = () => {
                         {formatDate(order.created_at)} • {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </p>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2">
                       {getStatusBadge(order.status)}
+                      {canEditOrder(order.status) && (
+                        <>
+                          <button
+                            onClick={() => handleEditOrder(order)}
+                            className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                            title="Edit Order"
+                          >
+                            <FiEdit2 className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(order)}
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                            title="Delete Order"
+                          >
+                            <FiTrash2 className="w-5 h-5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -353,6 +476,84 @@ const OrderManagement = () => {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Edit Order Modal */}
+        {showEditForm && editingOrder && templateId && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
+              <div className="flex justify-between items-center px-4 py-3 border-b">
+                <h3 className="text-lg font-medium text-gray-800">Edit Order #{editingOrder.data?.order_id || editingOrder.id}</h3>
+                <button
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setEditingOrder(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-800"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-4">
+                <DynamicOrderForm
+                  templateId={templateId}
+                  isEdit={true}
+                  initialData={editingOrder.data}
+                  onSubmit={handleEditSubmit}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && orderToDelete && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Delete Order</h3>
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setOrderToDelete(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <span className="sr-only">Close</span>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-600">
+                  Are you sure you want to delete order #{orderToDelete.data?.order_id || orderToDelete.id}?
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  This action cannot be undone. All data associated with this order will be permanently deleted.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setOrderToDelete(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Delete Order
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

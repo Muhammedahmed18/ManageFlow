@@ -1,6 +1,8 @@
 from django.db import models
 from django.conf import settings
 from business.models import Business
+import time
+from django.db import transaction
 
 class ProductTemplate(models.Model):
     STATUS_CHOICES = [
@@ -147,6 +149,25 @@ class OrderFieldPosition(models.Model):
     def __str__(self):
         return f"{self.key} at ({self.x}, {self.y}) on page {self.page}"
 
+class OrderNumberConfig(models.Model):
+    business = models.OneToOneField(Business, on_delete=models.CASCADE, related_name='order_number_config')
+    start_number = models.IntegerField(default=1)
+    current_number = models.IntegerField(default=1)
+    prefix = models.CharField(max_length=10, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Order Config for {self.business.name}"
+
+    def get_next_number(self):
+        with transaction.atomic():
+            # Lock the row for update
+            config = OrderNumberConfig.objects.select_for_update().get(pk=self.pk)
+            number = config.current_number
+            config.current_number += 1
+            config.save()
+            return f"{config.prefix or ''}{number}"
 
 class Order(models.Model):
     STATUS_CHOICES = [
@@ -162,7 +183,37 @@ class Order(models.Model):
     data = models.JSONField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     placed_by = models.CharField(max_length=20, choices=[("middleman", "Middleman"), ("manufacturer", "Manufacturer")])
+    order_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            try:
+                config, created = OrderNumberConfig.objects.get_or_create(
+                    business=self.business,
+                    defaults={'start_number': 1, 'current_number': 1}
+                )
+                
+                # Generate a unique order number
+                max_attempts = 10
+                for attempt in range(max_attempts):
+                    try:
+                        self.order_number = config.get_next_number()
+                        # Try to save with the generated number
+                        super().save(*args, **kwargs)
+                        return
+                    except Exception as e:
+                        if attempt == max_attempts - 1:
+                            raise e
+                        # If there's a unique constraint violation, increment and try again
+                        config.current_number += 1
+                        config.save()
+            except Exception as e:
+                # If all else fails, use a timestamp-based number
+                self.order_number = f"ORD-{int(time.time())}"
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Order #{self.id} by {self.customer.username}"
+        return f"Order #{self.order_number} by {self.customer.username}"
