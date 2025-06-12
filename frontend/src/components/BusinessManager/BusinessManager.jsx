@@ -120,12 +120,22 @@ const BusinessManager = () => {
     }
   };
 
+  const fetchOrders = async () => {
+    try {
+      const response = await api.get(`/manufacturer/orders/?business=${businessId}`);
+      setOrders(response.data);
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+    }
+  };
+
   useEffect(() => {
     if (businessId) {
       fetchBusiness();
       fetchData();
       fetchPendingCustomers();
       fetchCustomers();
+      fetchOrders();
     }
   }, [businessId]);
 
@@ -307,8 +317,8 @@ const BusinessManager = () => {
 
         {activeTab === "orders" && (
           <OrderManagement
-            templates={templates}
             orders={orders}
+            setOrders={setOrders}
             colors={colors}
           />
         )}
