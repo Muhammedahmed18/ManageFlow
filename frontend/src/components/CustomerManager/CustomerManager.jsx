@@ -37,11 +37,19 @@ const CustomerManager = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const statusResponse = await api.get("/auth/customer-status/");
+        const statusResponse = await api.get("/management/auth/customer-status/");
         setBusinessName(statusResponse.data.business_name || "Your Business");
 
-        const productsResponse = await api.get("/customer/products/");
-        setProducts(productsResponse.data);
+        const fetchProducts = async () => {
+          try {
+            const res = await api.get("/management/customer/products/");
+            setProducts(res.data);
+          } catch (err) {
+            console.error("Error loading products", err);
+            toast.error("Failed to load products");
+          }
+        };
+        fetchProducts();
 
         setLoading(false);
       } catch (err) {
@@ -57,15 +65,21 @@ const CustomerManager = () => {
   useEffect(() => {
     const fetchTemplate = async () => {
       try {
-        const res = await api.get("/customer/template-upload/");
-        const template = res.data.find(t => t.template_type === "order");
-        if (template) setTemplateId(template.id);
+        const res = await api.get("/management/customer/order-form-template/");
+        setOrderTemplate(res.data);
       } catch (err) {
-        console.error("Error loading order template", err);
+        console.error("Error loading order form template", err);
+        toast.error("Failed to load order form template");
       }
     };
     fetchTemplate();
   }, []);
+
+  useEffect(() => {
+    if (orderTemplate && orderTemplate.id) {
+      setTemplateId(orderTemplate.id);
+    }
+  }, [orderTemplate]);
 
   const computeFilteredProducts = (products, query) => {
     return products.filter((product) => {
@@ -268,7 +282,7 @@ const CustomerManager = () => {
                     initialData={{}}
                     onSubmit={async (formData) => {
                       try {
-                        await api.post("/customer/orders/", {
+                        await api.post("/management/customer/orders/", {
                           template_type: "order",
                           data: formData
                         });

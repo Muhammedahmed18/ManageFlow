@@ -3,8 +3,8 @@ import api from "../../services/authService";
 
 const CustomerManagement = ({ businessId, inviteCode, colors }) => {
   const [copied, setCopied] = useState(false);
-  const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [customers, setCustomers] = useState([]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(inviteCode);
@@ -12,22 +12,9 @@ const CustomerManagement = ({ businessId, inviteCode, colors }) => {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const fetchCustomers = async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.get(`/auth/customers/?business=${businessId}`);
-      setCustomers(response.data.customers || []);
-    } catch (err) {
-      console.error("Error fetching customers", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleApproval = async (id, approved) => {
     try {
       await api.patch(`/auth/approve-customer/${id}/`, { approved });
-      await fetchCustomers();
     } catch (err) {
       console.error("Error approving customer", err);
     }
@@ -36,9 +23,20 @@ const CustomerManagement = ({ businessId, inviteCode, colors }) => {
   const handleRejection = async (id) => {
     try {
       await api.patch(`/auth/approve-customer/${id}/`, { approved: false, rejected: true });
-      await fetchCustomers();
     } catch (err) {
       console.error("Error rejecting customer", err);
+    }
+  };
+
+  const fetchCustomers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get(`/management/manufacturer/business-customers/?business=${businessId}`);
+      setCustomers(response.data.customers || []);
+    } catch (err) {
+      console.error("Error fetching customers", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -191,7 +189,7 @@ const CustomerManagement = ({ businessId, inviteCode, colors }) => {
             }}>
               Loading customers...
             </div>
-          ) : customers.length > 0 ? (
+          ) : pendingCustomers.length > 0 || approvedCustomers.length > 0 || rejectedCustomers.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {/* Table Header */}
               <div style={{
@@ -225,7 +223,7 @@ const CustomerManagement = ({ businessId, inviteCode, colors }) => {
                 }}>
                   {/* Name */}
                   <div style={{ fontWeight: "500", color: colors.textDark }}>
-                    {customer.username || customer.name || "Unnamed Customer"}
+                    {customer.username || customer.name || customer.first_name || customer.last_name || customer.email || "Unnamed Customer"}
                   </div>
                   
                   {/* Email */}

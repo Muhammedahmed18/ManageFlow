@@ -16,7 +16,7 @@ const CustomerSettings = () => {
   useEffect(() => {
     const fetchOrderNumberConfig = async () => {
       try {
-        const response = await api.get('/customer/order-number-config/');
+        const response = await api.get('/management/customer/order-number-config/');
         setOrderNumberConfig({
           start_number: response.data.start_number,
           prefix: response.data.prefix || ''
@@ -34,7 +34,7 @@ const CustomerSettings = () => {
     setIsSavingConfig(true);
 
     try {
-      await api.post('/customer/order-number-config/', {
+      await api.post('/management/customer/order-number-config/', {
         start_number: parseInt(orderNumberConfig.start_number),
         prefix: orderNumberConfig.prefix
       });

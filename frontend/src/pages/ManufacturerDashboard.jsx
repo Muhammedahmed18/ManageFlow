@@ -133,7 +133,7 @@ const ManufacturerDashboard = () => {
 
   const fetchBusinesses = async (page = 1) => {
     try {
-      const res = await api.get(`/manufacturer/businesses/?page=${page}&limit=${BUSINESSES_PER_PAGE}`);
+      const res = await api.get(`/management/manufacturer/businesses/?page=${page}&limit=${BUSINESSES_PER_PAGE}`);
       if (res.data.results.length === 0 && page > 1) {
         // If current page is empty and not the first page, go back a page
         setCurrentPage((prev) => prev - 1);
@@ -154,7 +154,7 @@ const ManufacturerDashboard = () => {
     setErrors({});
     
     try {
-      await api.post("/manufacturer/businesses/", newBusiness);
+      await api.post("/management/manufacturer/businesses/", newBusiness);
       fetchBusinesses(currentPage);
       setShowAddModal(false);
       setNewBusiness({
@@ -178,7 +178,7 @@ const ManufacturerDashboard = () => {
     setErrors({});
     
     try {
-      await api.put(`/manufacturer/businesses/${selectedBusiness.id}/`, editBusiness);
+      await api.put(`/management/manufacturer/businesses/${selectedBusiness.id}/`, editBusiness);
       fetchBusinesses(currentPage);
       setShowEditModal(false);
       showToast("Business updated successfully!");
@@ -194,7 +194,7 @@ const ManufacturerDashboard = () => {
 
   const handleDeleteBusiness = async () => {
     try {
-      await api.delete(`/manufacturer/businesses/${selectedBusiness.id}/`);
+      await api.delete(`/management/manufacturer/businesses/${selectedBusiness.id}/`);
   
       const remainingBusinesses = businesses.length - 1;
       const isLastItemOnPage = remainingBusinesses === 0 && currentPage > 1;

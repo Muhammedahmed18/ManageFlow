@@ -88,7 +88,7 @@ const Header = ({
   const getNewButtonLabel = () => {
     switch (activeTab) {
       case 'products':
-        return productSubTab === 'templates' ? 'New Template' : 'Add Product';
+        return userType === 'customer' ? 'Browse Products' : (productSubTab === 'templates' ? 'New Template' : 'Add Product');
       case 'orders': return userType === 'manufacturer' ? 'New Order' : 'Place Order';
       case 'payments': return 'New Payment';
       default: return 'New';
@@ -118,7 +118,7 @@ const Header = ({
 
   const shouldShowNewButton = () => {
     if (userType === 'customer') {
-      return ['orders', 'products'].includes(activeTab);
+      return ['orders'].includes(activeTab);
     }
     return ['products', 'orders', 'payments'].includes(activeTab);
   };

@@ -4,6 +4,7 @@ import { loginUser } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { Lock, User, Factory, ShoppingCart, ArrowRight, Key, UserPlus, Home } from "lucide-react";
 import { motion } from "framer-motion";
+import colors from '../assets/colors';
 
 const LoginPage = () => {
   const [role, setRole] = useState("manufacturer");
@@ -20,23 +21,6 @@ const LoginPage = () => {
     type: "" // can be 'username', 'password', 'account', or 'general'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Enhanced color scheme with better contrast
-  const colors = {
-    primary: '#1C2E4A',
-    primaryLight: '#3A4D6B',
-    secondary: '#52677D',
-    accent: '#D1CFC9',
-    background: '#FFFFFF',
-    cardBg: '#F8F9FA',
-    text: '#1C2E4A',
-    textLight: '#52677D',
-    textLighter: '#8A9CB0',
-    border: '#E0E4E9',
-    white: '#FFFFFF',
-    error: '#DC2626',
-    success: '#10B981'
-  };
 
   useEffect(() => {
     setIsLoaded(true);

@@ -89,9 +89,9 @@ const Sidebar = ({
               color: colors.primary 
             }}>
             {userType === 'manufacturer' ? (
-              <Factory size={24} />
+              <Factory size={24} stroke="white" />
             ) : (
-              <ShoppingBag size={24} />
+              <ShoppingBag size={24} stroke="white" />
             )}
           </div>
           
@@ -112,15 +112,17 @@ const Sidebar = ({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="p-1.5 rounded-full transition-all duration-300"
+          className="p-2 rounded-full transition-all duration-300"
           style={{
-            background: colors.light,
+            background: '#fff',
+            border: '2px solid #e5e7eb',
             color: colors.primary,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+            boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+            zIndex: 10
           }}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {sidebarCollapsed ? <ChevronRight size={22} stroke={colors.primary} /> : <ChevronLeft size={22} stroke={colors.primary} />}
         </motion.button>
       </div>
 
@@ -150,9 +152,9 @@ const Sidebar = ({
               >
                 <span className={`transition-all duration-200 ${
                   activeTab === item.id ? 'scale-110' : 'scale-100'
-                }`}>
+                }`} style={{ minWidth: 28, display: 'inline-flex', justifyContent: 'center' }}>
                   {React.cloneElement(item.icon, { 
-                    color: activeTab === item.id ? 'white' : colors.light,
+                    stroke: 'white',
                     strokeWidth: activeTab === item.id ? 2.5 : 2
                   })}
                 </span>
@@ -166,7 +168,7 @@ const Sidebar = ({
                 {/* Secondary icon */}
                 {!sidebarCollapsed && item.secondaryIcon && (
                   <span className="ml-auto opacity-70 transition-opacity duration-300">
-                    {React.cloneElement(item.secondaryIcon, { color: colors.light })}
+                    {React.cloneElement(item.secondaryIcon, { stroke: 'white' })}
                   </span>
                 )}
               </motion.button>

@@ -7,7 +7,9 @@ from .models import (
     ProductCategory,
     TemplateUpload,
     Order,
-    OrderFieldPosition
+    OrderFieldPosition,
+    OrderFormTemplate,
+    OrderFormField
 )
 
 
@@ -112,7 +114,6 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
-
 
 
 class ProductCategorySerializer(serializers.ModelSerializer):
@@ -271,6 +272,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class TemplateUploadSerializer(serializers.ModelSerializer):
+    preview_image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = TemplateUpload
         fields = [
@@ -280,23 +283,62 @@ class TemplateUploadSerializer(serializers.ModelSerializer):
             'uploaded_at',
             'field_mappings',
             'preview_image',
+            'preview_image_url',
+            'preview_dpi',
+            'pdf_width_pt',
+            'pdf_height_pt',
         ]
-        read_only_fields = ['uploaded_at', 'preview_image']
+        read_only_fields = ['uploaded_at', 'preview_image', 'preview_dpi', 'pdf_width_pt', 'pdf_height_pt']
+
+    def get_preview_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.preview_image and request:
+            return request.build_absolute_uri(obj.preview_image.url)
+        elif obj.preview_image:
+            return f"/media/{obj.preview_image}"
+        return None
+
+
+class OrderFormFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderFormField
+        fields = [
+            'id',
+            'template',
+            'label',
+            'key',
+            'type',
+            'required',
+            'description',
+            'order',
+        ]
+        read_only_fields = ['key']
+
+
+class OrderFormTemplateSerializer(serializers.ModelSerializer):
+    fields = OrderFormFieldSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OrderFormTemplate
+        fields = ['id', 'business', 'name', 'created_at', 'fields']
+
+    def create(self, validated_data):
+        return OrderFormTemplate.objects.create(**validated_data)
 
 
 class OrderFieldPositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderFieldPosition
         fields = [
-            'id', 'template', 'key', 'label',
-            'x', 'y', 'page', 'font_size'
+            'id', 'x', 'y', 'page',
+            'field_key', 'template_upload', 'order_form_template',
         ]
 
 
 class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ['id', 'template_type', 'data', 'status', 'created_at']
+        fields = ['id', 'order_number', 'template_type', 'data', 'status', 'created_at']
         read_only_fields = ['status', 'created_at']
 
     def create(self, validated_data):

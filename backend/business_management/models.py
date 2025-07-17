@@ -3,6 +3,7 @@ from django.conf import settings
 from business.models import Business
 import time
 from django.db import transaction
+from django.utils.text import slugify
 
 class ProductTemplate(models.Model):
     STATUS_CHOICES = [
@@ -113,41 +114,12 @@ class TemplateUpload(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     field_mappings = models.JSONField(default=dict, blank=True, help_text="Mapping of form labels to field keys")
     preview_image = models.ImageField(upload_to='templates/previews/', null=True, blank=True)
+    preview_dpi = models.PositiveIntegerField(null=True, blank=True)
+    pdf_width_pt = models.FloatField(null=True, blank=True)
+    pdf_height_pt = models.FloatField(null=True, blank=True)
 
     class Meta:
         unique_together = ('uploaded_by', 'template_type')
-
-class OrderFieldPosition(models.Model):
-    template = models.ForeignKey(
-        TemplateUpload,
-        on_delete=models.CASCADE,
-        related_name='field_positions'
-    )
-    key = models.CharField(
-        max_length=100,
-        help_text="Internal field key used in order data (e.g., order_id, sent_by)"
-    )
-    label = models.CharField(
-        max_length=100,
-        help_text="Display label for the field (e.g., 'Order ID')"
-    )
-    x = models.FloatField(
-        help_text="X coordinate (in points, 72 DPI) for PDF placement"
-    )
-    y = models.FloatField(
-        help_text="Y coordinate (in points, 72 DPI) for PDF placement"
-    )
-    page = models.PositiveIntegerField(
-        default=1,
-        help_text="Page number in the PDF"
-    )
-    font_size = models.PositiveIntegerField(
-        default=12,
-        help_text="Font size for rendering text"
-    )
-
-    def __str__(self):
-        return f"{self.key} at ({self.x}, {self.y}) on page {self.page}"
 
 class OrderNumberConfig(models.Model):
     business = models.OneToOneField(Business, on_delete=models.CASCADE, related_name='order_number_config')
@@ -217,3 +189,46 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.order_number} by {self.customer.username}"
+
+class OrderFormTemplate(models.Model):
+    business = models.ForeignKey("business.Business", on_delete=models.CASCADE, related_name="order_form_templates")
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} (Business ID: {self.business_id})"
+
+class OrderFormField(models.Model):
+    FIELD_TYPES = [
+        ('text', 'Text'),
+        ('number', 'Number'),
+        ('date', 'Date'),
+        ('dropdown', 'Dropdown'),
+    ]
+
+    template = models.ForeignKey(OrderFormTemplate, on_delete=models.CASCADE, related_name="fields")
+    label = models.CharField(max_length=255)
+    key = models.SlugField(max_length=255)  # e.g., 'material', 'delivery_date'
+    type = models.CharField(max_length=20, choices=FIELD_TYPES)
+    required = models.BooleanField(default=False)
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            self.key = slugify(self.label)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.label} ({self.type})"
+
+class OrderFieldPosition(models.Model):
+    order_form_template = models.ForeignKey(OrderFormTemplate, on_delete=models.CASCADE, related_name="field_positions")
+    template_upload = models.ForeignKey('TemplateUpload', on_delete=models.CASCADE, related_name='field_positions', null=True, blank=True)
+    field_key = models.CharField(max_length=255, default="unknown")  # Must match OrderFormField.key
+    x = models.FloatField(help_text="X coordinate in PDF points")
+    y = models.FloatField(help_text="Y coordinate in PDF points")
+    page = models.IntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.field_key} @ ({self.x}, {self.y}) on page {self.page}"

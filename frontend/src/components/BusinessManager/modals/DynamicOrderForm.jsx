@@ -12,8 +12,11 @@ import {
   FiClock,
   FiCheckCircle,
   FiHash,
-  FiChevronDown
+  FiChevronDown,
+  FiSave,
+  FiX
 } from 'react-icons/fi';
+import toast from "react-hot-toast";
 
 const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = false }) => {
   const [fields, setFields] = useState([]);
@@ -27,6 +30,8 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
   const [previousOrders, setPreviousOrders] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState({});
   const [activeField, setActiveField] = useState(null);
+  const [isDigitalForm, setIsDigitalForm] = useState(false);
+  const [digitalFormTemplate, setDigitalFormTemplate] = useState(null);
 
   useEffect(() => {
     if (!templateId) return;
@@ -34,7 +39,37 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
       try {
         setError(null);
         setLoading(true);
-        const response = await api.get(`/template-upload/${templateId}/positions/`);
+        
+        // First try to get digital form template
+        try {
+          const digitalResponse = await api.get('/management/customer/order-form-template/');
+          const digitalTemplate = digitalResponse.data;
+          
+          if (digitalTemplate && digitalTemplate.fields && digitalTemplate.fields.length > 0) {
+            // Use digital form fields
+            const digitalFields = digitalTemplate.fields.map(field => ({
+              ...field,
+              type: field.type || 'text'
+            }));
+            
+            setFields(digitalFields);
+            setIsDigitalForm(true);
+            setDigitalFormTemplate(digitalTemplate);
+            
+            const initialForm = {};
+            digitalFields.forEach(field => {
+              initialForm[field.key] = isEdit ? (initialData[field.key] || '') : '';
+            });
+            setFormData(initialForm);
+            setLoading(false);
+            return;
+          }
+        } catch (digitalErr) {
+          console.log("No digital form template found, trying PDF template");
+        }
+        
+        // Fallback to PDF template
+        const response = await api.get(`/management/template-upload/${templateId}/positions/`);
         const fetchedFields = response.data || [];
         
         // Add type information to fields
@@ -42,8 +77,30 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
           ...field,
           type: determineFieldType(field.key, field.label)
         }));
-        
-        setFields(fieldsWithTypes);
+
+        // Force order number fields to type 'order_id'
+        const updatedFields = fieldsWithTypes.map((field) => {
+          const key = field.key?.toLowerCase() || '';
+          const label = field.label?.toLowerCase() || '';
+
+          if (
+            key.includes("order_no") ||
+            key.includes("order_number") ||
+            key.includes("order id") ||
+            label.includes("order_no") ||
+            label.includes("order_number") ||
+            label.includes("order id")
+          ) {
+            return {
+              ...field,
+              type: "order_id"
+            };
+          }
+          return field;
+        });
+
+        setFields(updatedFields);
+        setIsDigitalForm(false);
 
         const initialForm = {};
         fieldsWithTypes.forEach(field => {
@@ -65,7 +122,7 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
   useEffect(() => {
     const fetchOrderNumberConfig = async () => {
       try {
-        const response = await api.get('/customer/order-number-config/');
+        const response = await api.get('/management/customer/order-number-config/');
         setOrderNumberConfig(response.data);
       } catch (err) {
         console.error('Failed to fetch order number config:', err);
@@ -79,7 +136,7 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
   useEffect(() => {
     const fetchPreviousOrders = async () => {
       try {
-        const response = await api.get('/customer/orders/');
+        const response = await api.get('/management/customer/orders/');
         if (response.data && Array.isArray(response.data)) {
           setPreviousOrders(response.data);
           console.log('Previous orders loaded:', response.data); // Debug log
@@ -109,13 +166,23 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
     if (keyLower.includes('order_id') || labelLower.includes('order id')) {
       return 'order_id';
     }
+    if (keyLower.includes('number') || labelLower.includes('number') || 
+        keyLower.includes('quantity') || labelLower.includes('quantity')) {
+      return 'number';
+    }
+    if (keyLower.includes('email') || labelLower.includes('email')) {
+      return 'email';
+    }
+    if (keyLower.includes('phone') || labelLower.includes('phone')) {
+      return 'tel';
+    }
     return 'text';
   };
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await api.get("/customer/products/");
+        const res = await api.get("/management/customer/products/");
         setProducts(res.data);
       } catch (err) {
         console.error("Failed to load products", err);
@@ -176,9 +243,36 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
 
   const handleChange = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }));
-    if (key === "product" || key.toLowerCase().includes("product")) {
+    if (
+      key === "product" ||
+      key.toLowerCase().includes("product")
+      // Optionally: check if this is the product-linking field by flag
+    ) {
       const matched = products.find(p => p.name === value);
       setSelectedProduct(matched || null);
+
+      // Auto-fill logic
+      if (matched && Array.isArray(matched.field_values)) {
+        setFormData(prev => {
+          const updated = { ...prev };
+          fields.forEach(field => {
+            // Only auto-fill if empty
+            if (!updated[field.key] || updated[field.key] === '') {
+              // Try to find a matching product field by label (case-insensitive)
+              const match = matched.field_values.find(
+                fv =>
+                  fv.field &&
+                  fv.field.label &&
+                  fv.field.label.trim().toLowerCase() === field.label.trim().toLowerCase()
+              );
+              if (match) {
+                updated[field.key] = match.value;
+              }
+            }
+          });
+          return updated;
+        });
+      }
     }
   };
 
@@ -246,21 +340,18 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
 
     switch (field.type) {
       case 'order_id':
-        const formattedOrderNumber = orderNumberConfig ? 
-          `${orderNumberConfig.prefix ? orderNumberConfig.prefix + '-' : ''}${orderNumberConfig.current_number}` : '';
+        const formattedOrderNumber = orderNumberConfig
+          ? `${orderNumberConfig.prefix ? orderNumberConfig.prefix + '-' : ''}${orderNumberConfig.current_number}`
+          : '';
         return (
-          <div className="relative">
-            <input
-              type="text"
-              name={field.key}
-              value={formattedOrderNumber}
-              readOnly
-              className={`${inputClasses} bg-gray-50`}
-            />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-              <FiHash className="w-5 h-5 text-gray-400" />
-            </div>
-          </div>
+          <input
+            type="text"
+            name={field.key}
+            value={formattedOrderNumber}
+            readOnly
+            className={`${inputClasses} bg-gray-100`}
+            placeholder="Auto-generated"
+          />
         );
 
       case 'date':
@@ -320,7 +411,116 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
           />
         );
 
-      default:
+      case 'number':
+        return (
+          <input
+            type="number"
+            name={field.key}
+            value={formData[field.key] || ''}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            required={field.required}
+            className={inputClasses}
+          />
+        );
+
+      case 'email':
+        return (
+          <input
+            type="email"
+            name={field.key}
+            value={formData[field.key] || ''}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            required={field.required}
+            className={inputClasses}
+          />
+        );
+
+      case 'tel':
+        return (
+          <input
+            type="tel"
+            name={field.key}
+            value={formData[field.key] || ''}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            required={field.required}
+            className={inputClasses}
+          />
+        );
+
+      case 'dropdown':
+        // Check for product-linking dropdown
+        if (field.autoProductDropdown || (field.label && field.label.toLowerCase().includes("product"))) {
+          return (
+            <div className="relative">
+              <select
+                name={field.key}
+                autoComplete="on"
+                value={formData[field.key] || ''}
+                onChange={e => handleChange(field.key, e.target.value)}
+                required={field.required}
+                className={selectClasses}
+              >
+                <option value="">-- Select Product --</option>
+                {products.map(product => (
+                  <option key={product.id} value={product.name}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                <FiPackage className="w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+          );
+        }
+        // ...existing dropdown code for non-product dropdowns
+        return (
+          <div className="relative">
+            <select
+              name={field.key}
+              value={formData[field.key] || ''}
+              onChange={(e) => handleChange(field.key, e.target.value)}
+              required={field.required}
+              className={selectClasses}
+            >
+              <option value="">-- Select {field.label} --</option>
+              {field.options && field.options.map((option, index) => (
+                <option key={index} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+              <FiChevronDown className="w-5 h-5 text-gray-400" />
+            </div>
+          </div>
+        );
+
+      case 'text':
+        // Special handling for order number fields
+        const orderNoKeywords = [
+          'order no',
+          'order_no',
+          'order id',
+          'order_id',
+          'order number'
+        ];
+        if (orderNoKeywords.some(keyword => field.label && field.label.toLowerCase().includes(keyword))) {
+          const formattedOrderNumber = orderNumberConfig
+            ? `${orderNumberConfig.prefix ? orderNumberConfig.prefix + '-' : ''}${orderNumberConfig.current_number}`
+            : '';
+          return (
+            <input
+              type="text"
+              name={field.key}
+              value={formattedOrderNumber}
+              readOnly
+              className={`${inputClasses} bg-gray-100`}
+              placeholder="Auto-generated"
+            />
+          );
+        }
+        // ...existing text field rendering for other fields
         const suggestions = getFieldSuggestions(field.key);
         const filteredSuggestions = formData[field.key] 
           ? suggestions.filter(s => s.toLowerCase().includes(formData[field.key].toLowerCase()))
@@ -362,6 +562,37 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
             )}
           </div>
         );
+
+      default:
+        return (
+          <div className="relative">
+            <input
+              type="text"
+              name={field.key}
+              autoComplete="off"
+              value={formData[field.key] || ''}
+              onChange={(e) => handleInputChange(field.key, e.target.value)}
+              onFocus={() => handleFieldFocus(field.key)}
+              onBlur={() => handleFieldBlur(field.key)}
+              className={inputClasses}
+              required={field.required}
+              placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+            />
+            {showSuggestions[field.key] && getFieldSuggestions(field.key).length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {getFieldSuggestions(field.key).map((suggestion, index) => (
+                  <div
+                    key={index}
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                    onMouseDown={() => handleSuggestionClick(field.key, suggestion)}
+                  >
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
     }
   };
 
@@ -369,10 +600,17 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (onSubmit) await onSubmit(formData);
+      // Add order number if available
+      const submitData = { ...formData };
+      if (orderNumberConfig) {
+        const generatedOrderNumber = `${orderNumberConfig.prefix ? orderNumberConfig.prefix + '-' : ''}${orderNumberConfig.current_number}`;
+        submitData["order_number"] = generatedOrderNumber;
+      }
+
+      await onSubmit(submitData);
     } catch (err) {
-      console.error("Submission error", err);
-      setError("Failed to submit form. Please try again.");
+      console.error("Form submission error:", err);
+      toast.error("Failed to submit form. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -427,6 +665,11 @@ const DynamicOrderForm = ({ templateId, onSubmit, initialData = {}, isEdit = fal
         </h2>
         <p className="mt-2 text-gray-600">
           {isEdit ? 'Update your order details below.' : 'Fill in the details below to place your order.'}
+          {isDigitalForm && digitalFormTemplate && (
+            <span className="block text-sm text-blue-600 mt-1">
+              Using form: {digitalFormTemplate.name}
+            </span>
+          )}
         </p>
       </div>
 

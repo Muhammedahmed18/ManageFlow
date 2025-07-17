@@ -84,7 +84,7 @@ const OrderManagement = ({
   const handleStatusChange = async (orderId, newStatus) => {
     setLoading(true);
     try {
-      await api.patch(`/manufacturer/orders/${orderId}/`, {
+      await api.patch(`/management/manufacturer/orders/${orderId}/`, {
         status: newStatus
       });
 
@@ -239,8 +239,8 @@ const OrderManagement = ({
               <h3 className="text-lg font-medium text-gray-800 mb-4">Order Information</h3>
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-500">Order ID</p>
-                  <p className="font-medium">{order.data?.order_id || order.id}</p>
+                  <p className="text-sm text-gray-500">Order No</p>
+                  <p className="font-medium">{order.order_number || order.data?.order_id || order.id}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Created At</p>
@@ -282,7 +282,7 @@ const OrderManagement = ({
             <h3 className="text-lg font-medium text-gray-800 mb-4">Additional Details</h3>
             <div className="grid grid-cols-2 gap-4">
               {Object.entries(order.data).map(([key, value]) => {
-                if (!['order_id', 'product', 'return_date', 'customer', 'notes'].includes(key)) {
+                if (!['order_id', 'order_number', 'product', 'return_date', 'customer', 'notes'].includes(key)) {
                   return (
                     <div key={key}>
                       <p className="text-sm text-gray-500 capitalize">{key.replace('_', ' ')}</p>
@@ -339,7 +339,7 @@ const OrderManagement = ({
           <table className="min-w-full">
             <thead>
               <tr className="bg-gray-50">
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">Order ID</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-700">Order No</th>
                 <th className="px-6 py-4 text-left font-semibold text-gray-700">Product</th>
                 <th className="px-6 py-4 text-left font-semibold text-gray-700">Customer</th>
                 <th className="px-6 py-4 text-left font-semibold text-gray-700">Date</th>
@@ -350,7 +350,7 @@ const OrderManagement = ({
             <tbody>
               {filteredOrders.map(order => (
                 <tr key={order.id} className="hover:bg-gray-100 transition">
-                  <td className="px-6 py-4 font-medium text-gray-900">#{order.data?.order_id || order.id}</td>
+                  <td className="px-6 py-4 font-medium text-gray-900">{order.order_number || order.data?.order_id || order.id}</td>
                   <td className="px-6 py-4">{order.data?.product || 'N/A'}</td>
                   <td className="px-6 py-4">{order.data?.customer || 'N/A'}</td>
                   <td className="px-6 py-4">{formatDate(order.created_at)}</td>

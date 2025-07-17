@@ -10,7 +10,7 @@ const PendingApprovalPage = () => {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const response = await api.get("/auth/customer-dashboard/");
+        const response = await api.get("/management/auth/customer-dashboard/");
         if (response.status === 200 && response.data.is_approved) {
           setStatus("approved");
           navigate("/dashboard/customer");

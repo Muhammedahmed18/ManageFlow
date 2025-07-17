@@ -13,6 +13,7 @@ import {
 // Logo imports
 import LogoDark from '../assets/LogoDark.png';
 import LogoLight from '../assets/LogoLight.png';
+import colors from '../assets/colors';
 
 // Modern Dashboard Illustration Component
 const DashboardIllustration = ({ isDarkMode }) => (
@@ -87,37 +88,6 @@ const LandingPage = () => {
       applyTheme();
     }
   }, [isDarkMode, isThemeChanging]);
-
-  // Modern color scheme with gradients
-  const colors = isDarkMode ? {
-    primary: '#3B82F6',
-    primaryLight: '#60A5FA',
-    secondary: '#394652',
-    accent: '#A7B2C2',
-    background: '#060B13',
-    cardBg: '#0A1324',
-    text: '#F9FAFB',
-    textLight: '#A7B2C2',
-    textLighter: '#A8A79F',
-    border: '#394652',
-    white: '#F9FAFB',
-    success: '#10B981',
-    gradient: 'linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)',
-  } : {
-    primary: '#1C2E4A',
-    primaryLight: '#3A4D6B',
-    secondary: '#52677D',
-    accent: '#D1CFC9',
-    background: '#FFFFFF',
-    cardBg: '#F8F9FA',
-    text: '#1C2E4A',
-    textLight: '#52677D',
-    textLighter: '#8A9CB0',
-    border: '#E0E4E9',
-    white: '#FFFFFF',
-    success: '#10B981',
-    gradient: 'linear-gradient(135deg, #1C2E4A 0%, #3A4D6B 100%)',
-  };
 
   const navItems = [
     { id: 'home', label: 'Home' },
@@ -248,17 +218,17 @@ const LandingPage = () => {
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="fixed bottom-8 right-8 p-3 rounded-full shadow-xl z-50"
             style={{ 
-              background: colors.gradient,
+              background: colors.primary,
               color: colors.white 
             }}
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 1.1, background: colors.primaryLight }}
             whileTap={{ scale: 0.95 }}
             aria-label="Scroll back to top"
           >
-            <ArrowUp className="w-6 h-6" />
+            <ArrowUp className="w-6 h-6" style={{ color: colors.white }} />
           </motion.button>
         )}
       </AnimatePresence>
@@ -299,8 +269,9 @@ const LandingPage = () => {
             }}
             transition={{ 
               opacity: { duration: 0.3 },
-              rotate: { duration: 0.5, type: "spring" }
+              rotate: { duration: 0.5, type: "tween" }
             }}
+            style={{ color: colors.primary }}
           />
         </motion.div>
 
@@ -319,11 +290,11 @@ const LandingPage = () => {
                 onClick={() => scrollToSection(item.id)}
                 className={`px-5 py-2 rounded-full font-medium relative overflow-hidden group transition-all duration-300`}
                 style={{ 
-                  color: activeSection === item.id ? colors.white : colors.textLight,
+                  color: activeSection === item.id ? colors.white : colors.text,
                   backgroundColor: activeSection === item.id ? colors.primary : 'transparent'
                 }}
                 whileHover={{
-                  backgroundColor: activeSection !== item.id ? (isDarkMode ? 'rgba(167, 178, 194, 0.2)' : 'rgba(0, 0, 0, 0.1)') : colors.primaryLight
+                  backgroundColor: activeSection !== item.id ? (isDarkMode ? 'rgba(167, 178, 194, 0.2)' : 'rgba(0, 0, 0, 0.1)') : colors.primary
                 }}
                 aria-current={activeSection === item.id ? 'page' : undefined}
               >
@@ -370,14 +341,14 @@ const LandingPage = () => {
             onClick={() => navigate('/login')}
             className="px-6 py-2 rounded-full font-semibold shadow-sm flex items-center gap-2"
             style={{ 
-              background: colors.gradient,
+              background: colors.primary,
               color: colors.white 
             }}
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.05, background: colors.primaryLight }}
             whileTap={{ scale: 0.95 }}
           >
             <span>Sign In</span>
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" style={{ color: colors.white }} />
           </motion.button>
         </motion.div>
 
@@ -452,15 +423,15 @@ const LandingPage = () => {
                 }}
                 className="w-full px-6 py-3 rounded-lg font-semibold shadow-sm flex items-center justify-center gap-2 mt-4"
                 style={{ 
-                  background: colors.gradient,
+                  background: colors.primary,
                   color: colors.white 
                 }}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: navItems.length * 0.05, duration: 0.3 } }}
-                whileHover={{ scale: 1.02 }}
+                whileHover={{ scale: 1.02, background: colors.primaryLight }}
               >
                 <span>Sign In</span>
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4" style={{ color: colors.white }} />
               </motion.button>
             </div>
           </motion.div>
@@ -558,10 +529,10 @@ const LandingPage = () => {
               onClick={() => navigate('/register')}
               className="px-8 py-4 rounded-lg font-semibold shadow-sm flex items-center gap-2 justify-center"
               style={{ 
-                background: colors.gradient,
+                background: colors.primary,
                 color: colors.white 
               }}
-              whileHover={{ scale: 1.03 }}
+              whileHover={{ scale: 1.03, background: colors.primaryLight }}
               whileTap={{ scale: 0.97 }}
             >
               <span>Get Started Free</span>
@@ -573,9 +544,9 @@ const LandingPage = () => {
               style={{ 
                 borderColor: colors.primary, 
                 color: colors.primary,
-                backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.1)' : 'rgba(28, 46, 74, 0.1)'
+                backgroundColor: colors.white
               }}
-              whileHover={{ scale: 1.03, backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(28, 46, 74, 0.2)' }}
+              whileHover={{ scale: 1.03, backgroundColor: colors.cardBg }}
               whileTap={{ scale: 0.97 }}
             >
               <span>Explore Features</span>
@@ -705,13 +676,11 @@ const LandingPage = () => {
                 <motion.div
                   className="p-3 rounded-xl mr-4 flex items-center justify-center"
                   style={{ 
-                    background: colors.gradient,
-                    color: colors.white 
+                    backgroundColor: colors.primary + '15',
+                    color: colors.primary 
                   }}
-                  whileHover={{ rotate: [0, -5, 5, -5, 0] }}
-                  transition={{ duration: 0.5 }}
                 >
-                  {feature.icon}
+                  {React.cloneElement(feature.icon, { color: colors.primary })}
                 </motion.div>
                 <h3 className="text-xl font-semibold" style={{ color: colors.text }}>
                   {feature.title}
@@ -824,13 +793,11 @@ const LandingPage = () => {
                 <motion.div
                   className="w-16 h-16 rounded-full flex items-center justify-center relative z-10 shadow-lg"
                   style={{ 
-                    background: colors.gradient,
-                    color: colors.white 
+                    backgroundColor: colors.primary + '15',
+                    color: colors.primary 
                   }}
-                  whileHover={{ scale: 1.1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 10 }}
                 >
-                  {step.icon}
+                  {React.cloneElement(step.icon, { color: colors.primary })}
                 </motion.div>
                 {i < 3 && (
                   <motion.div

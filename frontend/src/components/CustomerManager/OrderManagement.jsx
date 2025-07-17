@@ -23,6 +23,8 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import DynamicOrderForm from "../BusinessManager/modals/DynamicOrderForm";
 import toast from 'react-hot-toast';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+
 
 const OrderManagement = () => {
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ const OrderManagement = () => {
     const fetchOrders = async () => {
       try {
         setLoading(true);
-        const res = await api.get("/customer/orders/");
+        const res = await api.get("/management/customer/orders/");
         setOrders(res.data);
         
         // Check if there's a new order confirmation in URL params
@@ -73,11 +75,16 @@ const OrderManagement = () => {
   useEffect(() => {
     const fetchTemplate = async () => {
       try {
-        const res = await api.get("/customer/template-upload/");
-        const template = res.data.find(t => t.template_type === "order");
-        if (template) setTemplateId(template.id);
+        const pdfRes = await api.get("/management/customer/template-upload/");
+        const template = pdfRes.data.find(t => t.template_type === "order");
+        if (template) {
+          setTemplateId(template.id);
+          console.log("PDF template loaded:", template);
+        } else {
+          console.warn("No PDF template of type 'order' found.");
+        }
       } catch (err) {
-        console.error("Error loading order template", err);
+        console.error("Error loading PDF template", err);
       }
     };
     fetchTemplate();
@@ -162,9 +169,9 @@ const OrderManagement = () => {
     
     // Add table
     doc.autoTable({
-      head: [['Order ID', 'Product', 'Status', 'Order Date', 'Return Date']],
+      head: [['Order No', 'Product', 'Status', 'Order Date', 'Return Date']],
       body: filteredOrders.map(order => [
-        order.id,
+        order.order_number || order.data?.order_id || order.id,
         order.data?.product || 'N/A',
         getStatusText(order.status),
         new Date(order.created_at).toLocaleDateString(),
@@ -214,7 +221,7 @@ const OrderManagement = () => {
       });
       
       // Refresh orders after successful edit
-      const res = await api.get("/customer/orders/");
+      const res = await api.get("/management/customer/orders/");
       setOrders(res.data);
       setShowEditForm(false);
       setEditingOrder(null);
@@ -256,10 +263,10 @@ const OrderManagement = () => {
     });
 
     try {
-      await api.delete(`/customer/orders/${orderToDelete.id}/`);
+      await api.delete(`/management/customer/orders/${orderToDelete.id}/`);
       
       // Refresh orders after successful deletion
-      const res = await api.get("/customer/orders/");
+      const res = await api.get("/management/customer/orders/");
       setOrders(res.data);
       
       // Update toast to success
@@ -295,6 +302,65 @@ const OrderManagement = () => {
       setOrderToDelete(null);
     }
   };
+
+  const handleDownloadPDF = async (order) => {
+    try {
+      // ✅ Use the templateId from component state
+      if (!templateId) {
+        toast.error("Template ID is missing. Please ensure a template is selected.");
+        return;
+      }
+  
+      console.log("Downloading PDF for order:", order);
+      console.log("Using template ID:", templateId);
+  
+      // ✅ 1. Fetch the template PDF
+      const pdfRes = await api.get(`/management/template-upload/${templateId}/stream/`, {
+        responseType: "arraybuffer",
+      });
+      const existingPdfBytes = pdfRes.data;
+  
+      // ✅ 2. Fetch field positions for that template
+      const posRes = await api.get(`/management/template-upload/${templateId}/positions/`);
+      const positions = posRes.data;
+  
+      // ✅ 3. Load and inject values
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+      const pages = pdfDoc.getPages();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  
+      for (const pos of positions) {
+        const value =
+          order.data?.[pos.field_key] || order.data?.[pos.label] || "";
+  
+        pages[pos.page - 1].drawText(String(value), {
+          x: (pos.x || 50) + 1,
+          y: (pos.y || 50) - 1,
+          size: pos.font_size || 11,
+          font: await pdfDoc.embedFont(StandardFonts.HelveticaBold),
+          color: rgb(0, 0, 0),
+        });
+      }
+  
+      // ✅ 4. Finalize and trigger download
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+  
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `order_${order.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+  
+      toast.success("PDF downloaded!");
+    } catch (error) {
+      console.error("Failed to download PDF:", error);
+      toast.error("Failed to download PDF.");
+    }
+  };  
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
@@ -369,7 +435,7 @@ const OrderManagement = () => {
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                     <div>
                       <div className="flex items-center">
-                        <h3 className="text-lg font-semibold text-gray-800">Order #{order.data?.order_id || order.id}</h3>
+                        <h3 className="text-lg font-semibold text-gray-800">Order #{order.order_number}</h3>
                         {newOrderConfirmed === order.id.toString() && (
                           <span className="ml-2 flex items-center text-sm text-green-600">
                             <FaCheck className="mr-1" /> Order placed successfully
@@ -383,6 +449,13 @@ const OrderManagement = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {getStatusBadge(order.status)}
+                      <button
+                        onClick={() => handleDownloadPDF(order)}
+                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        title="Download PDF"
+                      >
+                        <FiDownload className="w-5 h-5" />
+                      </button>
                       {canEditOrder(order.status) && (
                         <>
                           <button
@@ -484,7 +557,7 @@ const OrderManagement = () => {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
               <div className="flex justify-between items-center px-4 py-3 border-b">
-                <h3 className="text-lg font-medium text-gray-800">Edit Order #{editingOrder.data?.order_id || editingOrder.id}</h3>
+                <h3 className="text-lg font-medium text-gray-800">Edit Order #{editingOrder.order_number || editingOrder.data?.order_id || editingOrder.id}</h3>
                 <button
                   onClick={() => {
                     setShowEditForm(false);
@@ -529,7 +602,7 @@ const OrderManagement = () => {
               
               <div className="mb-6">
                 <p className="text-gray-600">
-                  Are you sure you want to delete order #{orderToDelete.data?.order_id || orderToDelete.id}?
+                  Are you sure you want to delete order #{orderToDelete.order_number || orderToDelete.data?.order_id || orderToDelete.id}?
                 </p>
                 <p className="text-sm text-gray-500 mt-2">
                   This action cannot be undone. All data associated with this order will be permanently deleted.

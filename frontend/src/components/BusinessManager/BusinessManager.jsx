@@ -12,6 +12,7 @@ import ProductPreviewModal from './modals/ProductPreviewModal';
 import PreviewModal from './modals/PreviewModal';
 import AddChoiceModal from './modals/AddChoiceModal';
 import CategoryModal from './modals/CategoryModal';
+import OrderFormBuilder from "./modals/OrderFormBuilder";
 import OrderManagement from './OrderManagement';
 import api from '../../services/authService';
 import CustomerManagement from './CustomerManagement';
@@ -60,7 +61,7 @@ const BusinessManager = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await api.get(`/product-categories/?business=${businessId}`);
+      const response = await api.get(`/management/product-categories/?business=${businessId}`);
       setCategories(response.data);
     } catch (err) {
       console.error("Error fetching categories:", err);
@@ -69,8 +70,9 @@ const BusinessManager = () => {
 
   const fetchBusiness = async () => {
     try {
-      const response = await api.get(`/manufacturer/businesses/${businessId}/`);
-      setBusiness(response.data);
+      const response = await api.get(`/management/manufacturer/businesses/`);
+      const business = response.data.results.find(b => b.id === parseInt(businessId, 10));
+      setBusiness(business || null);
     } catch (err) {
       console.error("Error fetching business:", err);
     } finally {
@@ -81,8 +83,8 @@ const BusinessManager = () => {
   const fetchData = async () => {
     try {
       const [templatesRes, productsRes] = await Promise.all([
-        api.get(`/product-templates/?business=${businessId}`),
-        api.get(`/products/?business=${businessId}`),
+        api.get(`/management/product-templates/?business=${businessId}`),
+        api.get(`/management/products/?business=${businessId}`),
       ]);
       
       const processedTemplates = templatesRes.data.map(template => ({
@@ -102,27 +104,9 @@ const BusinessManager = () => {
     }
   };
 
-  const fetchPendingCustomers = async () => {
-    try {
-      const response = await api.get(`/auth/pending-customers/?business=${businessId}`);
-      setPendingCustomers(response.data.pending_customers || []);
-    } catch (err) {
-      console.error("Error fetching pending customers:", err);
-    }
-  };
-  
-  const fetchCustomers = async () => {
-    try {
-      const response = await api.get(`/auth/customers/?business=${businessId}`);
-      setCustomers(response.data.customers || []);
-    } catch (err) {
-      console.error("Error fetching customers:", err);
-    }
-  };
-
   const fetchOrders = async () => {
     try {
-      const response = await api.get(`/manufacturer/orders/?business=${businessId}`);
+      const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
       setOrders(response.data);
     } catch (err) {
       console.error("Error fetching orders:", err);
@@ -133,15 +117,13 @@ const BusinessManager = () => {
     if (businessId) {
       fetchBusiness();
       fetchData();
-      fetchPendingCustomers();
-      fetchCustomers();
       fetchOrders();
     }
   }, [businessId]);
 
   const handleDeleteCategory = async (category, force = false) => {
     try {
-      const url = `/product-categories/${category.id}/${force ? '?force=true' : ''}`;
+      const url = `/management/product-categories/${category.id}/${force ? '?force=true' : ''}`;
       const response = await api.delete(url);
       
       if (response.status === 200) {
@@ -170,7 +152,7 @@ const BusinessManager = () => {
     setIsSaving(true);
     try {
       const { business, ...payload } = categoryData;
-      const response = await api.post('/product-categories/', payload);
+      const response = await api.post('/management/product-categories/', payload);
       setCategories([...categories, response.data]);
       setShowCategoryModal(false);
       return response.data;
@@ -185,7 +167,7 @@ const BusinessManager = () => {
   const onUpdateCategory = async (categoryData) => {
     setIsSaving(true);
     try {
-      const response = await api.put(`/product-categories/${categoryData.id}/`, categoryData);
+      const response = await api.put(`/management/product-categories/${categoryData.id}/`, categoryData);
       setCategories(categories.map(c => c.id === response.data.id ? response.data : c));
       setShowCategoryModal(false);
       return response.data;
@@ -253,7 +235,7 @@ const BusinessManager = () => {
             }}
             onDelete={async (id) => {
               try {
-                await api.delete(`/product-templates/${id}/`);
+                await api.delete(`/management/product-templates/${id}/`);
                 setTemplates(templates.filter(t => t.id !== id));
               } catch (err) {
                 console.error("Delete error:", err);
@@ -280,7 +262,7 @@ const BusinessManager = () => {
             }}
             onDelete={async (id) => {
               try {
-                await api.delete(`/products/${id}/`);
+                await api.delete(`/management/products/${id}/`);
                 setProducts(products.filter(p => p.id !== id));
               } catch (err) {
                 console.error("Delete error:", err);
@@ -296,7 +278,7 @@ const BusinessManager = () => {
             onCreateProduct={async (productData) => {
               setIsSaving(true);
               try {
-                const response = await api.post('/products/', productData);
+                const response = await api.post('/management/products/', productData);
                 setProducts([response.data, ...products]);
                 setShowAddForm(false);
                 return response.data;
@@ -333,8 +315,9 @@ const BusinessManager = () => {
         )}
 
         {activeTab === "settings" && (
-          <Settings />
+        <Settings businessId={businessId} />
         )}
+
 
         {showAddChoiceModal && (
           <AddChoiceModal
@@ -380,7 +363,7 @@ const BusinessManager = () => {
             setIsSaving={setIsSaving}
             onCreateTemplate={async (templateData) => {
               try {
-                const response = await api.post('/product-templates/', templateData);
+                const response = await api.post('/management/product-templates/', templateData);
                 const newTemplate = {
                   ...response.data,
                   fields: response.data.fields || [],
@@ -411,7 +394,7 @@ const BusinessManager = () => {
                   }))
                 };
 
-                const response = await api.put(`/product-templates/${templateData.id}/`, updatedTemplate);
+                const response = await api.put(`/management/product-templates/${templateData.id}/`, updatedTemplate);
                 setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
                 setSelectedTemplate(null);
                 setShowAddForm(false);
@@ -434,7 +417,7 @@ const BusinessManager = () => {
             onCreateProduct={async (productData) => {
               setIsSaving(true);
               try {
-                const response = await api.post('/products/', productData);
+                const response = await api.post('/management/products/', productData);
                 setProducts([response.data, ...products]);
                 setShowAddForm(false);
                 return response.data;
@@ -448,7 +431,7 @@ const BusinessManager = () => {
             onUpdateProduct={async (formData, productId) => {
               setIsSaving(true);
               try {
-                const response = await api.put(`/products/${productId}/`, formData);
+                const response = await api.put(`/management/products/${productId}/`, formData);
                 setProducts(products.map(p => p.id === response.data.id ? response.data : p));
                 setSelectedProduct(null);
                 setShowAddForm(false);

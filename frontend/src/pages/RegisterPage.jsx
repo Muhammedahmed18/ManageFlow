@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { registerUser } from '../services/authService';
 import { Factory, ShoppingCart, ArrowRight, UserPlus, User, Mail, Lock, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
+import colors from '../assets/colors';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -22,22 +23,6 @@ const RegisterPage = () => {
 
   const navigate = useNavigate();
   const { storeRegistrationEmail } = useAuth();
-
-  const colors = {
-    primary: '#1C2E4A',
-    primaryLight: '#3A4D6B',
-    secondary: '#52677D',
-    accent: '#D1CFC9',
-    background: '#FFFFFF',
-    cardBg: '#F8F9FA',
-    text: '#1C2E4A',
-    textLight: '#52677D',
-    textLighter: '#8A9CB0',
-    border: '#E0E4E9',
-    white: '#FFFFFF',
-    error: '#DC2626',
-    success: '#10B981'
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
