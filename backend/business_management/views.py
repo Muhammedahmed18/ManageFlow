@@ -11,6 +11,7 @@ import os
 from io import BytesIO
 from django.http import FileResponse
 from rest_framework.decorators import api_view, permission_classes
+import traceback
 
 from .models import (
     ProductTemplate, 
