@@ -1,3 +1,11 @@
+"""
+Business Management Views
+=========================
+
+This module contains all the views for the business management system.
+Views are organized by functionality: Product, Order, Template, Customer, and Configuration views.
+"""
+
 from rest_framework import viewsets, generics, status
 from rest_framework.views import APIView
 from rest_framework.generics import get_object_or_404
@@ -44,12 +52,23 @@ from authapp.models import User
 User = get_user_model()
 
 
+# =============================================================================
+# PRODUCT VIEWS
+# =============================================================================
+
 class ProductCategoryViewSet(viewsets.ModelViewSet):
+    """
+    Product Category ViewSet
+    ------------------------
+    Handles CRUD operations for product categories with hierarchical structure.
+    Supports parent-child relationships and business-specific filtering.
+    """
     queryset = ProductCategory.objects.all()
     serializer_class = ProductCategorySerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        """Filter categories by business and user permissions"""
         business_id = self.request.query_params.get('business')
         user = self.request.user
         queryset = self.queryset.filter(business__manufacturer=user)
@@ -58,12 +77,14 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
         return queryset.select_related('parent', 'business')
 
     def perform_create(self, serializer):
+        """Create category with automatic business assignment"""
         business = self.request.user.businesses.first()
         if not business:
             raise ValidationError("User has no associated business")
         serializer.save(business=business)
 
     def update(self, request, *args, **kwargs):
+        """Update category with validation for self-referencing"""
         instance = self.get_object()
 
         if instance.business.manufacturer != request.user:
@@ -89,11 +110,17 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductTemplateViewSet(viewsets.ModelViewSet):
+    """
+    Product Template ViewSet
+    ------------------------
+    Handles CRUD operations for product templates with field management.
+    """
     queryset = ProductTemplate.objects.all()
     serializer_class = ProductTemplateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        """Filter templates by business and user permissions"""
         business_id = self.request.query_params.get('business')
         qs = self.queryset.filter(business__manufacturer=self.request.user)
         if business_id:
@@ -102,12 +129,18 @@ class ProductTemplateViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    """
+    Product ViewSet
+    ---------------
+    Handles CRUD operations for products with image upload and field value management.
+    """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
+        """Filter products by business and user permissions"""
         business_id = self.request.query_params.get('business')
         qs = self.queryset.filter(business__manufacturer=self.request.user)
         if business_id:
@@ -115,6 +148,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_serializer(self, *args, **kwargs):
+        """Handle JSON field values from form data"""
         if self.request.method in ['POST', 'PUT', 'PATCH']:
             data = self.request.data.copy()
             if isinstance(data.get('field_values'), str):
@@ -126,20 +160,22 @@ class ProductViewSet(viewsets.ModelViewSet):
         return super().get_serializer(*args, **kwargs)
 
     def get_serializer_context(self):
+        """Add request context to serializer"""
         context = super().get_serializer_context()
         context.update({"request": self.request})
         return context
 
     def perform_create(self, serializer):
+        """Create product with image handling"""
         image = self.request.FILES.get('image')
         serializer.save(image=image)
 
     def perform_update(self, serializer):
+        """Update product with image replacement"""
         instance = self.get_object()
         old_image = instance.image.path if instance.image else None
         serializer.save()
         instance = Product.objects.prefetch_related("field_values__field").get(pk=serializer.instance.pk)
-
 
         new_image = self.request.FILES.get('image')
         if new_image:
@@ -149,17 +185,28 @@ class ProductViewSet(viewsets.ModelViewSet):
                 os.remove(old_image)
 
 
+# =============================================================================
+# TEMPLATE VIEWS
+# =============================================================================
+
 class OrderFormTemplateViewSet(viewsets.ModelViewSet):
+    """
+    Order Form Template ViewSet
+    ---------------------------
+    Handles CRUD operations for order form templates with field management.
+    """
     queryset = OrderFormTemplate.objects.prefetch_related('fields').all()
     serializer_class = OrderFormTemplateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        """Filter templates by business and user permissions"""
         queryset = self.queryset.filter(business__manufacturer=self.request.user)
         print(f"OrderFormTemplate queryset: {queryset.count()} templates found for user {self.request.user.id}")
         return queryset
 
     def list(self, request, *args, **kwargs):
+        """List templates with debug information"""
         print(f"OrderFormTemplate list called by user {request.user.id}")
         response = super().list(request, *args, **kwargs)
         print(f"OrderFormTemplate list response: {response.data}")
@@ -173,6 +220,7 @@ class OrderFormTemplateViewSet(viewsets.ModelViewSet):
         return response
 
     def create(self, request, *args, **kwargs):
+        """Create template with uniqueness validation"""
         business_id = request.data.get('business')
 
         if not business_id:
@@ -191,11 +239,17 @@ class OrderFormTemplateViewSet(viewsets.ModelViewSet):
 
 
 class OrderFormFieldViewSet(viewsets.ModelViewSet):
+    """
+    Order Form Field ViewSet
+    ------------------------
+    Handles CRUD operations for order form fields with bulk operations.
+    """
     queryset = OrderFormField.objects.all()
     serializer_class = OrderFormFieldSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        """Filter fields by template and user permissions"""
         return self.queryset.filter(template__business__manufacturer=self.request.user)
 
     def clear(self, request, template_id=None):
@@ -221,9 +275,15 @@ class OrderFormFieldViewSet(viewsets.ModelViewSet):
 
 
 class OrderFieldPositionView(APIView):
+    """
+    Order Field Position View
+    -------------------------
+    Handles field position coordinates for PDF template mapping.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, template_id, position_id=None):
+        """Get field positions for a template"""
         if position_id:
             position = get_object_or_404(OrderFieldPosition, id=position_id, template_upload_id=template_id)
             serializer = OrderFieldPositionSerializer(position)
@@ -234,6 +294,7 @@ class OrderFieldPositionView(APIView):
             return Response(serializer.data)
 
     def post(self, request, template_id):
+        """Create field position with template validation"""
         try:
             data = request.data.copy()
             data['template_upload'] = template_id
@@ -248,6 +309,7 @@ class OrderFieldPositionView(APIView):
             form_template = None
             if business:
                 form_template = OrderFormTemplate.objects.filter(business=business).first()
+
             if not form_template:
                 # Try by name (template_type) if above fails
                 form_template = OrderFormTemplate.objects.filter(
@@ -272,6 +334,7 @@ class OrderFieldPositionView(APIView):
             return Response({'detail': str(e)}, status=500)
 
     def put(self, request, template_id, position_id):
+        """Update field position coordinates"""
         try:
             position = get_object_or_404(OrderFieldPosition, id=position_id, template_upload_id=template_id)
 
@@ -291,6 +354,7 @@ class OrderFieldPositionView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, template_id, position_id):
+        """Delete field position"""
         try:
             position = get_object_or_404(OrderFieldPosition, id=position_id, template_upload_id=template_id)
             position.delete()
@@ -299,35 +363,17 @@ class OrderFieldPositionView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class CustomerStatusCheckView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-        if not user.is_authenticated or not getattr(user, 'is_approved', False):
-            return Response({"detail": "Access pending approval."}, status=403)
-        return Response({"detail": "Approved", "is_approved": True}, status=200)
-
-
-class CustomerProductListView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-
-        if user.role != "customer" or not user.business:
-            return Response({"detail": "You are not authorized or not linked to any business."}, 
-                          status=403)
-
-        products = Product.objects.filter(business=user.business)
-        serializer = ProductSerializer(products, many=True, context={'request': request})
-        return Response(serializer.data)
-
 class TemplateUploadView(APIView):
+    """
+    Template Upload View
+    --------------------
+    Handles PDF template uploads with preview generation and file management.
+    """
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request, template_id=None):
+        """Get template(s) with permission validation"""
         user = request.user
 
         if template_id:
@@ -360,6 +406,7 @@ class TemplateUploadView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        """Upload template with preview generation"""
         if request.user.role != "manufacturer":
             return Response({"detail": "Only manufacturers can upload templates."}, 
                             status=status.HTTP_403_FORBIDDEN)
@@ -400,6 +447,7 @@ class TemplateUploadView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def _generate_pdf_preview_image(self, template_obj):
+        """Generate preview image from PDF with fallback handling"""
         try:
             pdf_path = template_obj.file.path
             output_folder = os.path.join("media", "templates", "previews")
@@ -524,6 +572,7 @@ class TemplateUploadView(APIView):
             pass
 
     def delete(self, request, template_id=None):
+        """Delete template with file cleanup"""
         user = request.user
         if not template_id:
             return Response({"detail": "Template ID required."}, status=400)
@@ -549,10 +598,48 @@ class TemplateUploadView(APIView):
             return Response({"detail": "Template not found."}, status=404)
 
 
+class TemplateFileDownloadView(APIView):
+    """
+    Template File Download View
+    ---------------------------
+    Handles secure file downloads for uploaded templates.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, template_id):
+        """Download template file with permission validation"""
+        try:
+            template = TemplateUpload.objects.get(id=template_id)
+
+            # Check if user is authorized to access this template
+            if request.user.role == "manufacturer":
+                if template.uploaded_by != request.user:
+                    return Response({"detail": "Not authorized."}, status=403)
+            elif request.user.role == "customer":
+                if not request.user.business or request.user.business.manufacturer != template.uploaded_by:
+                    return Response({"detail": "Not authorized."}, status=403)
+            else:
+                return Response({"detail": "Not authorized."}, status=403)
+
+            return FileResponse(template.file.open("rb"), content_type="application/pdf")
+        except TemplateUpload.DoesNotExist:
+            return Response({"detail": "Template not found."}, status=404)
+
+
+# =============================================================================
+# ORDER VIEWS
+# =============================================================================
+
 class CustomerOrderView(APIView):
+    """
+    Customer Order View
+    -------------------
+    Handles customer order operations (list and create).
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Get customer's orders"""
         user = request.user
         if not user.business:
             return Response({"detail": "Customer is not linked to any business"}, status=400)
@@ -562,16 +649,24 @@ class CustomerOrderView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        """Create new order"""
         serializer = OrderSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             order = serializer.save()
             return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class CustomerOrderDetailView(APIView):
+    """
+    Customer Order Detail View
+    --------------------------
+    Handles individual customer order operations (update and delete).
+    """
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, order_id):
+        """Update order (only pending orders)"""
         order = get_object_or_404(Order, id=order_id, customer=request.user)
 
         if order.status != "pending":
@@ -584,6 +679,7 @@ class CustomerOrderDetailView(APIView):
         return Response(serializer.errors, status=400)
 
     def delete(self, request, order_id):
+        """Delete order (only pending orders)"""
         order = get_object_or_404(Order, id=order_id, customer=request.user)
         
         if order.status != "pending":
@@ -595,10 +691,67 @@ class CustomerOrderDetailView(APIView):
         order.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-class OrderNumberConfigView(APIView):
+
+class ManufacturerOrderView(APIView):
+    """
+    Manufacturer Order View
+    -----------------------
+    Handles manufacturer order listing and management.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Get orders for a specific business"""
+        user = request.user
+        business_id = request.query_params.get('business')
+        
+        if not business_id:
+            return Response({"detail": "Business ID is required"}, status=400)
+
+        try:
+            business = Business.objects.get(id=business_id, manufacturer=user)
+        except Business.DoesNotExist:
+            return Response({"detail": "Business not found"}, status=404)
+
+        orders = Order.objects.filter(business=business).order_by("-created_at")
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
+
+
+class ManufacturerOrderDetailView(APIView):
+    """
+    Manufacturer Order Detail View
+    ------------------------------
+    Handles individual manufacturer order operations (status updates).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, order_id):
+        """Update order status"""
+        user = request.user
+        try:
+            order = Order.objects.get(id=order_id, business__manufacturer=user)
+        except Order.DoesNotExist:
+            return Response({"detail": "Order not found."}, status=404)
+
+        status = request.data.get('status')
+        if status and status in dict(Order.STATUS_CHOICES):
+            order.status = status
+            order.save()
+            return Response({"detail": "Order status updated."})
+        return Response({"detail": "Invalid status."}, status=400)
+
+
+class OrderNumberConfigView(APIView):
+    """
+    Order Number Configuration View
+    -------------------------------
+    Handles order number generation configuration for businesses.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get current order number configuration"""
         user = request.user
         if not user.business:
             return Response({"detail": "Business not found"}, status=400)
@@ -615,6 +768,7 @@ class OrderNumberConfigView(APIView):
         })
 
     def post(self, request):
+        """Update order number configuration"""
         user = request.user
         if not user.business:
             return Response({"detail": "Business not found"}, status=400)
@@ -640,46 +794,58 @@ class OrderNumberConfigView(APIView):
             'prefix': config.prefix
         })
 
-class ManufacturerOrderView(APIView):
+
+# =============================================================================
+# CUSTOMER VIEWS
+# =============================================================================
+
+class CustomerStatusCheckView(APIView):
+    """
+    Customer Status Check View
+    --------------------------
+    Checks if customer account is approved and active.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Check customer approval status"""
         user = request.user
-        business_id = request.query_params.get('business')
-        
-        if not business_id:
-            return Response({"detail": "Business ID is required"}, status=400)
+        if not user.is_authenticated or not getattr(user, 'is_approved', False):
+            return Response({"detail": "Access pending approval."}, status=403)
+        return Response({"detail": "Approved", "is_approved": True}, status=200)
 
-        try:
-            business = Business.objects.get(id=business_id, manufacturer=user)
-        except Business.DoesNotExist:
-            return Response({"detail": "Business not found"}, status=404)
 
-        orders = Order.objects.filter(business=business).order_by("-created_at")
-        serializer = OrderSerializer(orders, many=True)
+class CustomerProductListView(APIView):
+    """
+    Customer Product List View
+    --------------------------
+    Provides customers with access to their business's products.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get products for customer's business"""
+        user = request.user
+
+        if user.role != "customer" or not user.business:
+            return Response({"detail": "You are not authorized or not linked to any business."}, 
+                          status=403)
+
+        products = Product.objects.filter(business=user.business)
+        serializer = ProductSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)
 
-class ManufacturerOrderDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, order_id):
-        user = request.user
-        try:
-            order = Order.objects.get(id=order_id, business__manufacturer=user)
-        except Order.DoesNotExist:
-            return Response({"detail": "Order not found."}, status=404)
-
-        status = request.data.get('status')
-        if status and status in dict(Order.STATUS_CHOICES):
-            order.status = status
-            order.save()
-            return Response({"detail": "Order status updated."})
-        return Response({"detail": "Invalid status."}, status=400)
 
 class CustomerOrderFormTemplateView(APIView):
+    """
+    Customer Order Form Template View
+    ---------------------------------
+    Provides customers with access to their business's order form template.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Get order form template for customer's business"""
         user = request.user
         
         if user.role != "customer":
@@ -698,31 +864,21 @@ class CustomerOrderFormTemplateView(APIView):
         except Exception as e:
             return Response({"detail": "Failed to load order form template."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class TemplateFileDownloadView(APIView):
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request, template_id):
-        try:
-            template = TemplateUpload.objects.get(id=template_id)
-
-            # Check if user is authorized to access this template
-            if request.user.role == "manufacturer":
-                if template.uploaded_by != request.user:
-                    return Response({"detail": "Not authorized."}, status=403)
-            elif request.user.role == "customer":
-                if not request.user.business or request.user.business.manufacturer != template.uploaded_by:
-                    return Response({"detail": "Not authorized."}, status=403)
-            else:
-                return Response({"detail": "Not authorized."}, status=403)
-
-            return FileResponse(template.file.open("rb"), content_type="application/pdf")
-        except TemplateUpload.DoesNotExist:
-            return Response({"detail": "Template not found."}, status=404)
+# =============================================================================
+# BUSINESS MANAGEMENT VIEWS
+# =============================================================================
 
 class ManufacturerBusinessListView(APIView):
+    """
+    Manufacturer Business List View
+    -------------------------------
+    Provides manufacturers with a list of their businesses.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Get manufacturer's businesses"""
         user = request.user
         businesses = Business.objects.filter(manufacturer=user)
         data = [
@@ -737,10 +893,17 @@ class ManufacturerBusinessListView(APIView):
         ]
         return Response({"results": data})
 
+
 class BusinessCustomerListView(APIView):
+    """
+    Business Customer List View
+    ---------------------------
+    Provides manufacturers with a list of customers for their businesses.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """Get customers for a specific business"""
         business_id = request.query_params.get('business')
         if not business_id:
             return Response({"detail": "Business ID required"}, status=400)
@@ -760,9 +923,19 @@ class BusinessCustomerListView(APIView):
         ]
         return Response({"customers": data})
 
+
+# =============================================================================
+# UTILITY VIEWS
+# =============================================================================
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def clear_order_form_fields(request, template_id):
+    """
+    Clear Order Form Fields Utility
+    -------------------------------
+    Utility function to clear all fields from an order form template.
+    """
     try:
         template = OrderFormTemplate.objects.get(id=template_id, business__manufacturer=request.user)
         template.fields.all().delete()

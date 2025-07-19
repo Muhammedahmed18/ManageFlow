@@ -1,3 +1,11 @@
+"""
+Business Management Serializers
+===============================
+
+This module contains all the serializers for the business management system.
+Serializers are organized by functionality: Product, Order, Template, and Configuration serializers.
+"""
+
 from rest_framework import serializers
 from .models import (
     ProductTemplate,
@@ -13,7 +21,16 @@ from .models import (
 )
 
 
+# =============================================================================
+# PRODUCT SERIALIZERS
+# =============================================================================
+
 class TemplateFieldSerializer(serializers.ModelSerializer):
+    """
+    Template Field Serializer
+    -------------------------
+    Handles serialization of template fields with validation for currency symbols.
+    """
     class Meta:
         model = TemplateField
         fields = [
@@ -28,6 +45,7 @@ class TemplateFieldSerializer(serializers.ModelSerializer):
         }
 
     def update(self, instance, validated_data):
+        """Prevent currency symbol changes once set"""
         if instance.type == "currency" and "currency_symbol" in validated_data:
             if instance.currency_symbol != validated_data["currency_symbol"]:
                 raise serializers.ValidationError({
@@ -37,6 +55,11 @@ class TemplateFieldSerializer(serializers.ModelSerializer):
 
 
 class ProductTemplateSerializer(serializers.ModelSerializer):
+    """
+    Product Template Serializer
+    ---------------------------
+    Handles complex template creation and updates with nested field management.
+    """
     fields = TemplateFieldSerializer(many=True)
 
     class Meta:
@@ -47,6 +70,7 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at']
 
     def create(self, validated_data):
+        """Create template with nested fields"""
         fields_data = validated_data.pop('fields', [])
         template = ProductTemplate.objects.create(**validated_data)
         for field_data in fields_data:
@@ -54,6 +78,7 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
         return template
 
     def update(self, instance, validated_data):
+        """Update template with intelligent field matching and currency validation"""
         fields_data = validated_data.pop('fields', [])
 
         if not isinstance(fields_data, list):
@@ -117,6 +142,11 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
 
 
 class ProductCategorySerializer(serializers.ModelSerializer):
+    """
+    Product Category Serializer
+    ---------------------------
+    Handles hierarchical category serialization with parent-child relationships.
+    """
     children = serializers.SerializerMethodField()
 
     class Meta:
@@ -128,14 +158,17 @@ class ProductCategorySerializer(serializers.ModelSerializer):
         }
 
     def get_children(self, obj):
+        """Recursively serialize child categories"""
         return ProductCategorySerializer(obj.children.all(), many=True).data
 
     def validate_parent(self, value):
+        """Ensure parent category belongs to user's business"""
         if value and value.business != self.context['request'].user.businesses.first():
             raise serializers.ValidationError("Parent category must belong to your business")
         return value
 
     def create(self, validated_data):
+        """Create category with automatic business assignment"""
         validated_data.pop('business', None)
         business = self.context['request'].user.businesses.first()
         if not business:
@@ -143,6 +176,7 @@ class ProductCategorySerializer(serializers.ModelSerializer):
         return ProductCategory.objects.create(business=business, **validated_data)
 
     def update(self, instance, validated_data):
+        """Update category with validation for self-referencing"""
         if 'business' in validated_data:
             validated_data.pop('business')
         parent = validated_data.get('parent')
@@ -155,6 +189,11 @@ class ProductCategorySerializer(serializers.ModelSerializer):
 
 
 class ProductFieldValueSerializer(serializers.ModelSerializer):
+    """
+    Product Field Value Serializer
+    ------------------------------
+    Handles serialization of individual product field values.
+    """
     field = TemplateFieldSerializer(read_only=True)
     field_id = serializers.PrimaryKeyRelatedField(
         queryset=TemplateField.objects.all(),
@@ -169,6 +208,11 @@ class ProductFieldValueSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """
+    Product Serializer
+    ------------------
+    Handles complex product serialization with nested field values and image handling.
+    """
     field_values = ProductFieldValueSerializer(many=True, required=False)
     template = ProductTemplateSerializer(read_only=True)
     template_id = serializers.PrimaryKeyRelatedField(
@@ -197,6 +241,7 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'business']
 
     def get_image_url(self, obj):
+        """Generate full URL for product image"""
         request = self.context.get('request')
         if obj.image and request:
             return request.build_absolute_uri(obj.image.url)
@@ -205,11 +250,13 @@ class ProductSerializer(serializers.ModelSerializer):
         return None
 
     def validate_field_values(self, value):
+        """Validate field values format"""
         if not isinstance(value, list):
             raise serializers.ValidationError("Field values must be a list.")
         return value
 
     def create(self, validated_data):
+        """Create product with field values and permission validation"""
         raw_field_values = self.initial_data.get('field_values', [])
         if isinstance(raw_field_values, str):
             import json
@@ -238,6 +285,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return product
 
     def update(self, instance, validated_data):
+        """Update product with field values"""
         raw_field_values = self.initial_data.get('field_values', [])
         if isinstance(raw_field_values, str):
             import json
@@ -251,27 +299,28 @@ class ProductSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
-        existing_values = {fv.field.id: fv for fv in instance.field_values.all()}
-        updated_field_ids = set()
-
+        # Update field values
+        instance.field_values.all().delete()
         for value in validated_field_values:
-            field = value['field']
-            updated_field_ids.add(field.id)
-            if field.id in existing_values:
-                fv = existing_values[field.id]
-                fv.value = value['value']
-                fv.save()
-            else:
-                ProductFieldValue.objects.create(
-                    product=instance,
-                    field=field,
-                    value=value['value']
-                )
+            ProductFieldValue.objects.create(
+                product=instance,
+                field=value['field'],
+                value=value['value']
+            )
 
         return instance
 
 
+# =============================================================================
+# TEMPLATE SERIALIZERS
+# =============================================================================
+
 class TemplateUploadSerializer(serializers.ModelSerializer):
+    """
+    Template Upload Serializer
+    --------------------------
+    Handles template file uploads with preview image generation.
+    """
     preview_image_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -291,15 +340,19 @@ class TemplateUploadSerializer(serializers.ModelSerializer):
         read_only_fields = ['uploaded_at', 'preview_image', 'preview_dpi', 'pdf_width_pt', 'pdf_height_pt']
 
     def get_preview_image_url(self, obj):
+        """Generate full URL for preview image"""
         request = self.context.get('request')
         if obj.preview_image and request:
             return request.build_absolute_uri(obj.preview_image.url)
-        elif obj.preview_image:
-            return f"/media/{obj.preview_image}"
         return None
 
 
 class OrderFormFieldSerializer(serializers.ModelSerializer):
+    """
+    Order Form Field Serializer
+    ---------------------------
+    Handles order form field serialization with automatic key generation.
+    """
     class Meta:
         model = OrderFormField
         fields = [
@@ -316,6 +369,11 @@ class OrderFormFieldSerializer(serializers.ModelSerializer):
 
 
 class OrderFormTemplateSerializer(serializers.ModelSerializer):
+    """
+    Order Form Template Serializer
+    ------------------------------
+    Handles order form template serialization with nested fields.
+    """
     fields = OrderFormFieldSerializer(many=True, read_only=True)
 
     class Meta:
@@ -323,33 +381,51 @@ class OrderFormTemplateSerializer(serializers.ModelSerializer):
         fields = ['id', 'business', 'name', 'created_at', 'fields']
 
     def create(self, validated_data):
+        """Create order form template"""
         return OrderFormTemplate.objects.create(**validated_data)
 
 
 class OrderFieldPositionSerializer(serializers.ModelSerializer):
+    """
+    Order Field Position Serializer
+    -------------------------------
+    Handles field position coordinates for PDF templates.
+    """
     class Meta:
         model = OrderFieldPosition
         fields = [
-            'id', 'x', 'y', 'page',
-            'field_key', 'template_upload', 'order_form_template',
+            'id',
+            'order_form_template',
+            'template_upload',
+            'field_key',
+            'x',
+            'y',
+            'page',
         ]
 
 
+# =============================================================================
+# ORDER SERIALIZERS
+# =============================================================================
+
 class OrderSerializer(serializers.ModelSerializer):
+    """
+    Order Serializer
+    ----------------
+    Handles order serialization with automatic order number generation.
+    """
     class Meta:
         model = Order
         fields = ['id', 'order_number', 'template_type', 'data', 'status', 'created_at']
         read_only_fields = ['status', 'created_at']
 
     def create(self, validated_data):
+        """Create order with automatic business assignment"""
         user = self.context['request'].user
-        if not hasattr(user, 'business') or not user.business:
-            raise serializers.ValidationError("Customer is not linked to a business")
-
-        return Order.objects.create(
-            customer=user,
-            business=user.business,
-            template_type=validated_data.get('template_type', 'order'),
-            data=validated_data.get('data', {}),
-            placed_by='middleman'
-        )
+        business = user.businesses.first()
+        if not business:
+            raise serializers.ValidationError("User has no associated business")
+        
+        validated_data['business'] = business
+        validated_data['customer'] = user
+        return Order.objects.create(**validated_data)
