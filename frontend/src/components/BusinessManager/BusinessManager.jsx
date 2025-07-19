@@ -16,6 +16,7 @@ import OrderFormBuilder from "./modals/OrderFormBuilder";
 import OrderManagement from './OrderManagement';
 import api from '../../services/authService';
 import CustomerManagement from './CustomerManagement';
+import PaymentManagement from './PaymentManagement';
 import { FileText, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 const BusinessManager = () => {
@@ -312,6 +313,10 @@ const BusinessManager = () => {
             colors={colors}
             pendingCustomers={pendingCustomers}
           />
+        )}
+
+        {activeTab === "payments" && (
+          <PaymentManagement />
         )}
 
         {activeTab === "settings" && (
