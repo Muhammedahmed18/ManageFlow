@@ -12,8 +12,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const syncUserFromStorage = () => {
       const token = sessionStorage.getItem('accessToken');
+      const role = sessionStorage.getItem('role');
       if (token) {
-        setCurrentUser({ token });
+        setCurrentUser({ token, role });
       } else {
         setCurrentUser(null);
       }
@@ -24,8 +25,9 @@ export const AuthProvider = ({ children }) => {
 
     const handleTokenRefresh = () => {
       const refreshedToken = sessionStorage.getItem('accessToken');
+      const role = sessionStorage.getItem('role');
       if (refreshedToken) {
-        setCurrentUser({ token: refreshedToken });
+        setCurrentUser({ token: refreshedToken, role });
       }
     };
 
@@ -63,6 +65,9 @@ export const AuthProvider = ({ children }) => {
     if (userData?.token) {
       sessionStorage.setItem('accessToken', userData.token);
     }
+    if (userData?.role) {
+      sessionStorage.setItem('role', userData.role);
+    }
     setCurrentUser(userData);
   };
 
@@ -76,6 +81,7 @@ export const AuthProvider = ({ children }) => {
     clearRegistrationEmail,
     updateCurrentUser,
     isAuthenticated: !!currentUser,
+    role: currentUser?.role || null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -13,8 +13,7 @@ const LoginPage = () => {
   const { updateCurrentUser } = useAuth();
   const [formData, setFormData] = useState({
     username: "",
-    password: "",
-    business_id: ""
+    password: ""
   });
   const [error, setError] = useState({
     message: "",
@@ -71,28 +70,24 @@ const LoginPage = () => {
       return;
     }
 
-    if (role === "customer" && !formData.business_id.trim()) {
-      setError({ message: "Please enter your business invite code", type: "general" });
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const response = await loginUser(
         formData.username,
         formData.password,
-        role === "customer" ? formData.business_id : null
+        null,
+        role
       );
 
-      const { access, role: userRole, is_approved } = response;
+      const { access, refresh, role: userRole } = response;
       updateCurrentUser({ token: access, role: userRole });
       sessionStorage.setItem("role", userRole);
+      sessionStorage.setItem("accessToken", access);
+      sessionStorage.setItem("refreshToken", refresh);
 
       if (userRole === "manufacturer") {
         navigate("/dashboard/manufacturer");
       } else if (userRole === "customer") {
-        const approved = String(is_approved).toLowerCase() === "true";
-        navigate(approved ? "/dashboard/customer" : "/pending-approval");
+        navigate("/dashboard/customer");
       }
     } catch (err) {
       let errorMessage = "Login failed. Please try again";
@@ -110,6 +105,9 @@ const LoginPage = () => {
             errorType = "username";
           } else if (data.detail && data.detail.toLowerCase().includes("credentials")) {
             errorMessage = "Invalid credentials. Please try again";
+          } else if (data.detail && data.detail.toLowerCase().includes("this account is")) {
+            errorMessage = data.detail;
+            errorType = "account";
           }
         } else if (status === 401) {
           errorMessage = "Unauthorized. Please check your credentials";
@@ -267,14 +265,16 @@ const LoginPage = () => {
             className="space-y-4"
           >
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Username</label>
+              <label htmlFor="username" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Username</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
                   color: error.type === 'username' ? colors.error : colors.textLighter 
                 }} />
                 <input
+                  id="username"
                   type="text"
                   name="username"
+                  autoComplete="username"
                   placeholder="Enter your username"
                   value={formData.username}
                   onChange={handleChange}
@@ -290,14 +290,16 @@ const LoginPage = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Password</label>
+              <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
                   color: error.type === 'password' ? colors.error : colors.textLighter 
                 }} />
                 <input
+                  id="password"
                   type="password"
                   name="password"
+                  autoComplete="current-password"
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
@@ -310,25 +312,23 @@ const LoginPage = () => {
                   }}
                 />
               </div>
-              {role === "manufacturer" && (
-                <div className="mt-2 flex justify-start">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="button"
-                    onClick={() => navigate("/forgot-password")}
-                    className="text-sm flex items-center"
-                    style={{ color: colors.textLight }}
-                  >
-                    <Key className="mr-1" size={14} style={{ color: colors.primary }} />
-                    Forgot password?
-                  </motion.button>
-                </div>
-              )}
+              <div className="mt-2 flex justify-start">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-sm flex items-center"
+                  style={{ color: colors.textLight }}
+                >
+                  <Key className="mr-1" size={14} style={{ color: colors.primary }} />
+                  Forgot password?
+                </motion.button>
+              </div>
             </div>
 
-            {role === "customer" && (
-              <motion.div
+            {/* Remove the business invite code input from the form UI */}
+            {/* <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 transition={{ duration: 0.3 }}
@@ -363,8 +363,7 @@ const LoginPage = () => {
                     Forgot password?
                   </motion.button>
                 </div>
-              </motion.div>
-            )}
+              </motion.div> */}
 
             <motion.button
               whileHover={{ scale: 1.02 }}

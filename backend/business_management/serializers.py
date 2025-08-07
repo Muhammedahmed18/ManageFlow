@@ -13,12 +13,15 @@ from .models import (
     Product,
     ProductFieldValue,
     ProductCategory,
-    TemplateUpload,
+
     Order,
-    OrderFieldPosition,
-    OrderFormTemplate,
-    OrderFormField
+
+    Business,
+    Invoice,
+    NumberConfig,
+    OrderStatusHistory,
 )
+from django.utils.text import slugify
 
 
 # =============================================================================
@@ -35,12 +38,13 @@ class TemplateFieldSerializer(serializers.ModelSerializer):
         model = TemplateField
         fields = [
             'id', 'label', 'type', 'required', 'options',
-            'currency_symbol', 'decimal_places', 'order'
+            'currency_symbol', 'decimal_places', 'default_value', 'order'
         ]
         extra_kwargs = {
             'options': {'required': False},
             'currency_symbol': {'required': False},
             'decimal_places': {'required': False},
+            'default_value': {'required': False},
             'order': {'required': False}
         }
 
@@ -71,6 +75,9 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Create template with nested fields"""
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can create product templates.')
         fields_data = validated_data.pop('fields', [])
         template = ProductTemplate.objects.create(**validated_data)
         for field_data in fields_data:
@@ -79,6 +86,9 @@ class ProductTemplateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """Update template with intelligent field matching and currency validation"""
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can update product templates.')
         fields_data = validated_data.pop('fields', [])
 
         if not isinstance(fields_data, list):
@@ -163,20 +173,24 @@ class ProductCategorySerializer(serializers.ModelSerializer):
 
     def validate_parent(self, value):
         """Ensure parent category belongs to user's business"""
-        if value and value.business != self.context['request'].user.businesses.first():
-            raise serializers.ValidationError("Parent category must belong to your business")
         return value
 
     def create(self, validated_data):
         """Create category with automatic business assignment"""
-        validated_data.pop('business', None)
-        business = self.context['request'].user.businesses.first()
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can create categories.')
+        business = validated_data.get('business')
         if not business:
-            raise serializers.ValidationError("User has no associated business")
+            raise serializers.ValidationError('Business must be provided.')
+        validated_data.pop('business', None)
         return ProductCategory.objects.create(business=business, **validated_data)
 
     def update(self, instance, validated_data):
         """Update category with validation for self-referencing"""
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can update categories.')
         if 'business' in validated_data:
             validated_data.pop('business')
         parent = validated_data.get('parent')
@@ -257,6 +271,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Create product with field values and permission validation"""
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can create products.')
         raw_field_values = self.initial_data.get('field_values', [])
         if isinstance(raw_field_values, str):
             import json
@@ -268,9 +285,12 @@ class ProductSerializer(serializers.ModelSerializer):
         validated_field_values = field_serializer.validated_data
 
         template = validated_data['template']
-        user = self.context['request'].user
+        user = request.user
 
-        if template.business.manufacturer != user:
+        # FIX: Use business from Business.objects.filter(owner=user).first()
+        from business.models import Business
+        business = Business.objects.filter(owner=user).first()
+        if not business or template.business != business:
             raise serializers.ValidationError("You don't have permission to use this template.")
 
         product = Product.objects.create(business=template.business, **validated_data)
@@ -286,6 +306,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """Update product with field values"""
+        request = self.context.get('request')
+        if not request or request.user.role != 'customer':
+            raise serializers.ValidationError('Only customers can update products.')
         raw_field_values = self.initial_data.get('field_values', [])
         if isinstance(raw_field_values, str):
             import json
@@ -315,98 +338,30 @@ class ProductSerializer(serializers.ModelSerializer):
 # TEMPLATE SERIALIZERS
 # =============================================================================
 
-class TemplateUploadSerializer(serializers.ModelSerializer):
-    """
-    Template Upload Serializer
-    --------------------------
-    Handles template file uploads with preview image generation.
-    """
-    preview_image_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = TemplateUpload
-        fields = [
-            'id',
-            'file',
-            'template_type',
-            'uploaded_at',
-            'field_mappings',
-            'preview_image',
-            'preview_image_url',
-            'preview_dpi',
-            'pdf_width_pt',
-            'pdf_height_pt',
-        ]
-        read_only_fields = ['uploaded_at', 'preview_image', 'preview_dpi', 'pdf_width_pt', 'pdf_height_pt']
-
-    def get_preview_image_url(self, obj):
-        """Generate full URL for preview image"""
-        request = self.context.get('request')
-        if obj.preview_image and request:
-            return request.build_absolute_uri(obj.preview_image.url)
-        return None
 
 
-class OrderFormFieldSerializer(serializers.ModelSerializer):
-    """
-    Order Form Field Serializer
-    ---------------------------
-    Handles order form field serialization with automatic key generation.
-    """
-    class Meta:
-        model = OrderFormField
-        fields = [
-            'id',
-            'template',
-            'label',
-            'key',
-            'type',
-            'required',
-            'description',
-            'order',
-        ]
-        read_only_fields = ['key']
 
 
-class OrderFormTemplateSerializer(serializers.ModelSerializer):
-    """
-    Order Form Template Serializer
-    ------------------------------
-    Handles order form template serialization with nested fields.
-    """
-    fields = OrderFormFieldSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = OrderFormTemplate
-        fields = ['id', 'business', 'name', 'created_at', 'fields']
-
-    def create(self, validated_data):
-        """Create order form template"""
-        return OrderFormTemplate.objects.create(**validated_data)
-
-
-class OrderFieldPositionSerializer(serializers.ModelSerializer):
-    """
-    Order Field Position Serializer
-    -------------------------------
-    Handles field position coordinates for PDF templates.
-    """
-    class Meta:
-        model = OrderFieldPosition
-        fields = [
-            'id',
-            'order_form_template',
-            'template_upload',
-            'field_key',
-            'x',
-            'y',
-            'page',
-        ]
 
 
 # =============================================================================
 # ORDER SERIALIZERS
 # =============================================================================
+
+class OrderStatusHistorySerializer(serializers.ModelSerializer):
+    """
+    Order Status History Serializer
+    -------------------------------
+    Handles serialization of order status change history.
+    """
+    changed_by_name = serializers.CharField(source='changed_by.username', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = OrderStatusHistory
+        fields = ['id', 'order', 'status', 'status_display', 'changed_by', 'changed_by_name', 'changed_at', 'notes']
+        read_only_fields = ['changed_at']
+
 
 class OrderSerializer(serializers.ModelSerializer):
     """
@@ -414,18 +369,189 @@ class OrderSerializer(serializers.ModelSerializer):
     ----------------
     Handles order serialization with automatic order number generation.
     """
+    customer_name = serializers.CharField(source='customer.username', read_only=True)
+    customer_email = serializers.CharField(source='customer.email', read_only=True)
+    customer_first_name = serializers.CharField(source='customer.first_name', read_only=True)
+    business_id = serializers.IntegerField(source='business.id', read_only=True)
+    status_history = OrderStatusHistorySerializer(many=True, read_only=True)
+    
     class Meta:
         model = Order
-        fields = ['id', 'order_number', 'template_type', 'data', 'status', 'created_at']
+        fields = ['id', 'order_number', 'template_type', 'data', 'status', 'order_type', 'created_at', 'business', 'business_id', 'customer_name', 'customer_email', 'customer_first_name', 'status_history']
         read_only_fields = ['status', 'created_at']
 
     def create(self, validated_data):
         """Create order with automatic business assignment"""
         user = self.context['request'].user
-        business = user.businesses.first()
+        business = validated_data.get('business')
         if not business:
-            raise serializers.ValidationError("User has no associated business")
-        
-        validated_data['business'] = business
+            raise serializers.ValidationError('Business must be provided.')
         validated_data['customer'] = user
         return Order.objects.create(**validated_data)
+
+
+# =============================================================================
+# BUSINESS SERIALIZER
+# =============================================================================
+
+class BusinessSerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Business
+        fields = [
+            'id', 'name', 'slogan', 'shipping_country', 'invite_code', 'owner', 'manufacturer', 'status'
+        ]
+        read_only_fields = ['id', 'invite_code', 'owner', 'manufacturer', 'status']
+    
+    def get_status(self, obj):
+        """Determine the status of the business relationship for the current user"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            print(f"DEBUG: No request context or user not authenticated for business {obj.id}")
+            return 'none'
+        
+        user = request.user
+        print(f"DEBUG: Computing status for business {obj.id} ({obj.name}) and user {user.username}")
+        
+        # If user is the approved manufacturer
+        if obj.manufacturer == user:
+            print(f"DEBUG: User {user.username} is approved manufacturer for business {obj.id}")
+            return 'approved'
+        
+        # If user is in pending manufacturers
+        if obj.pending_manufacturers.filter(id=user.id).exists():
+            print(f"DEBUG: User {user.username} is pending manufacturer for business {obj.id}")
+            return 'pending'
+        
+        # If user is in rejected manufacturers (map to access_revoked for frontend compatibility)
+        if obj.rejected_manufacturers.filter(id=user.id).exists():
+            print(f"DEBUG: User {user.username} is rejected manufacturer for business {obj.id}")
+            return 'access_revoked'
+        
+        # If user is the owner (customer)
+        if obj.owner == user:
+            print(f"DEBUG: User {user.username} is owner for business {obj.id}")
+            return 'owned'
+        
+        # No relationship
+        print(f"DEBUG: User {user.username} has no relationship with business {obj.id}")
+        return 'none'
+
+
+# =============================================================================
+# INVOICE SERIALIZERS
+# =============================================================================
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    """
+    Invoice Serializer
+    ------------------
+    Handles invoice serialization with order and business information.
+    Supports enhanced invoice data including multiple orders and line items.
+    """
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    customer_name = serializers.CharField(required=False, allow_blank=True)
+    business_name = serializers.CharField(source='business.name', read_only=True)
+    related_orders_display = serializers.CharField(source='get_related_orders_display', read_only=True)
+    total_orders = serializers.IntegerField(source='get_total_orders', read_only=True)
+    
+    # Custom decimal fields to ensure proper formatting
+    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    sales_tax = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    gross_total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    advanced_paid = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'business', 'invoice_number', 'invoice_type', 
+            'order', 'related_orders', 'related_orders_display', 'total_orders',
+            'customer_name', 'bill_to', 'contact_info', 'po_number', 'invoice_date',
+            'amount', 'due_date', 'status', 'notes', 'created_at', 'updated_at', 
+            'order_number', 'business_name',
+            # Enhanced fields
+            'line_items', 'subtotal', 'sales_tax', 'gross_total', 
+            'advanced_paid', 'balance_due',
+            'payment_instructions', 'contact_for_questions', 'thank_you_message'
+        ]
+        read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'related_orders_display', 'total_orders']
+
+    def create(self, validated_data):
+        # Set the business from the request user only if not provided in data
+        request = self.context.get('request')
+        if 'business' not in validated_data and request and hasattr(request.user, 'business'):
+            validated_data['business'] = request.user.business
+        
+        # Handle related orders
+        related_orders = validated_data.pop('related_orders', [])
+        invoice = super().create(validated_data)
+        
+        # Add related orders
+        if related_orders:
+            invoice.related_orders.set(related_orders)
+        
+        return invoice
+
+    def validate(self, data):
+        """Validate invoice data and ensure proper decimal handling"""
+        # Ensure all decimal fields are properly formatted
+        decimal_fields = ['subtotal', 'sales_tax', 'gross_total', 'advanced_paid', 'balance_due', 'amount']
+        
+        for field in decimal_fields:
+            if field in data:
+                try:
+                    # Convert to Decimal and ensure 2 decimal places
+                    from decimal import Decimal, ROUND_HALF_UP
+                    value = Decimal(str(data[field]))
+                    data[field] = float(value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError(f"Invalid decimal value for {field}")
+        
+        return data
+
+    def update(self, instance, validated_data):
+        # Handle related orders
+        related_orders = validated_data.pop('related_orders', None)
+        invoice = super().update(instance, validated_data)
+        
+        # Update related orders if provided
+        if related_orders is not None:
+            invoice.related_orders.set(related_orders)
+        
+        return invoice
+
+
+# =============================================================================
+# NUMBER CONFIGURATION SERIALIZERS
+# =============================================================================
+
+class NumberConfigSerializer(serializers.ModelSerializer):
+    """
+    Number Configuration Serializer
+    -------------------------------
+    Handles serialization of number configuration for orders and invoices.
+    """
+    class Meta:
+        model = NumberConfig
+        fields = [
+            'id', 'business', 'config_type', 'start_number', 
+            'current_number', 'prefix', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate(self, data):
+        """Allow setting current_number to any value"""
+        # Allow any current_number value - remove restrictive validation
+        # This allows resetting the numbering sequence
+        print(f"NumberConfigSerializer validate - data: {data}")
+        return data
+
+    def update(self, instance, validated_data):
+        """Add debugging to update method"""
+        print(f"NumberConfigSerializer update - instance: {instance}, validated_data: {validated_data}")
+        result = super().update(instance, validated_data)
+        print(f"NumberConfigSerializer update - result: {result}")
+        return result

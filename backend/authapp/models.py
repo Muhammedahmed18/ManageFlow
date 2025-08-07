@@ -14,4 +14,3 @@ class User(AbstractUser):
     
     is_approved = models.BooleanField(default=False)  # New
     rejected = models.BooleanField(default=False)
-    business = models.ForeignKey('business.Business', on_delete=models.SET_NULL, null=True, blank=True, related_name='customers')

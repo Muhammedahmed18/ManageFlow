@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { List, Calendar, Edit, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
 
 const formatDate = (date) => {
   if (!date) return 'N/A';
@@ -28,6 +29,7 @@ const TemplateManagement = ({
   handlePreviewItem,
   selectedTemplate
 }) => {
+  const { role } = useAuth();
   const [sortOption, setSortOption] = useState('newest');
   
   console.log('Rendering TemplateManagement with:', {
@@ -150,23 +152,27 @@ const TemplateManagement = ({
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedTemplate(template);
-                            setShowAddForm(true);
-                          }}
-                          className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                          style={{ color: colors.primary }}
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => onDelete(template.id)}
-                          className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                          style={{ color: colors.error }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {role === 'customer' && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSelectedTemplate(template);
+                                setShowAddForm(true);
+                              }}
+                              className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                              style={{ color: colors.primary }}
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => onDelete(template.id)}
+                              className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                              style={{ color: colors.error }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -181,15 +187,17 @@ const TemplateManagement = ({
             <p style={{ color: colors.textMedium }}>
               {searchQuery ? "Try different search terms or" : "Get started by"} creating your first template
             </p>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowAddForm(true)}
-              className="mt-4 px-5 py-2.5 rounded-lg text-white font-medium"
-              style={{ backgroundColor: colors.primary }}
-            >
-              + New Template
-            </motion.button>
+            {role === 'customer' && (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowAddForm(true)}
+                className="mt-4 px-5 py-2.5 rounded-lg text-white font-medium"
+                style={{ backgroundColor: colors.primary }}
+              >
+                + New Template
+              </motion.button>
+            )}
           </div>
         )}
       </div>

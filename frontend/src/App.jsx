@@ -9,9 +9,9 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ManufacturerDashboard from './pages/ManufacturerDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
-import PendingApprovalPage from './pages/PendingApprovalPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import BusinessManager from "./pages/BusinessManager";
+import CustomerManager from './pages/CustomerManager';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -31,12 +31,16 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-            {/* Protected routes */}
-            <Route element={<ProtectedRoute />}>
+            {/* Manufacturer-only routes */}
+            <Route element={<ProtectedRoute allowedRoles={['manufacturer']} />}> 
               <Route path="/dashboard/manufacturer" element={<ManufacturerDashboard />} />
               <Route path="/manage/:businessId" element={<BusinessManager />} />
+            </Route>
+
+            {/* Customer-only routes */}
+            <Route element={<ProtectedRoute allowedRoles={['customer']} />}> 
               <Route path="/dashboard/customer" element={<CustomerDashboard />} />
-              <Route path="/pending-approval" element={<PendingApprovalPage />} /> {/* ✅ corrected route */}
+              <Route path="/manage/customer/:id" element={<CustomerManager />} />
             </Route>
 
             {/* Fallback */}

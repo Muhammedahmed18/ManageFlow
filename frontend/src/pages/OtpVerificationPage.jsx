@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { verifyOTP, forgotPassword } from '../services/authService';
+import { verifyOTP, forgotPassword, resendRegistrationOTP } from '../services/authService';
 import { ArrowRight, Mail, LockKeyhole, ArrowLeft, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
@@ -109,6 +109,23 @@ const OtpVerificationPage = () => {
       inputRefs.current[index - 1].focus();
     }
   };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const digits = pastedData.replace(/\D/g, '').slice(0, 6); // Only take first 6 digits
+    
+    if (digits.length === 6) {
+      const newOtp = digits.split('');
+      setOtp(newOtp);
+      
+      // Focus the last filled input or the first empty one
+      const lastFilledIndex = Math.min(digits.length - 1, 5);
+      if (inputRefs.current[lastFilledIndex]) {
+        inputRefs.current[lastFilledIndex].focus();
+      }
+    }
+  };
   
   const handleResendOTP = async () => {
     try {
@@ -119,8 +136,8 @@ const OtpVerificationPage = () => {
       if (isPasswordReset) {
         await forgotPassword(email);
       } else {
-        // For registration OTP resend, you might need a different endpoint
-        await forgotPassword(email);
+        // For registration OTP resend, use the correct endpoint
+        await resendRegistrationOTP(email);
       }
       
       // Show success toast for OTP resend
@@ -278,6 +295,7 @@ const OtpVerificationPage = () => {
                 value={digit}
                 onChange={e => handleInputChange(index, e.target.value)}
                 onKeyDown={e => handleKeyDown(index, e)}
+                onPaste={handlePaste}
                 maxLength={1}
                 required
                 whileFocus={{ scale: 1.05 }}

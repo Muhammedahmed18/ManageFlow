@@ -55,7 +55,7 @@ class TemplateField(models.Model):
         ("currency", "Currency"),
         ("dropdown", "Dropdown"),
         ("boolean", "Boolean"),
-        ("date", "Date")
+        ("default_value", "Default Value")
     ]
 
     template = models.ForeignKey(ProductTemplate, on_delete=models.CASCADE, related_name='fields')
@@ -65,6 +65,7 @@ class TemplateField(models.Model):
     currency_symbol = models.CharField(max_length=3, default='$', blank=True, null=True)
     decimal_places = models.PositiveSmallIntegerField(default=2, blank=True, null=True)
     options = models.JSONField(default=list, blank=True)
+    default_value = models.CharField(max_length=500, blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -150,130 +151,56 @@ class ProductFieldValue(models.Model):
 # TEMPLATE MODELS
 # =============================================================================
 
-class TemplateUpload(models.Model):
-    """
-    Template Upload Model
-    ---------------------
-    Manages uploaded PDF templates for order forms and invoices.
-    Stores file metadata and field mappings for form processing.
-    """
-    TEMPLATE_TYPE_CHOICES = [
-        ("order", "Order Form"),
-        ("invoice", "Invoice Form"),
-    ]
-
-    uploaded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="template_uploads"
-    )
-    template_type = models.CharField(max_length=10, choices=TEMPLATE_TYPE_CHOICES)
-    file = models.FileField(upload_to='templates/')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    field_mappings = models.JSONField(default=dict, blank=True, help_text="Mapping of form labels to field keys")
-    preview_image = models.ImageField(upload_to='templates/previews/', null=True, blank=True)
-    preview_dpi = models.PositiveIntegerField(null=True, blank=True)
-    pdf_width_pt = models.FloatField(null=True, blank=True)
-    pdf_height_pt = models.FloatField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ('uploaded_by', 'template_type')
 
 
-class OrderFormTemplate(models.Model):
-    """
-    Order Form Template Model
-    -------------------------
-    Defines the structure of order forms for businesses.
-    Contains fields that customers need to fill when placing orders.
-    """
-    business = models.ForeignKey("business.Business", on_delete=models.CASCADE, related_name="order_form_templates")
-    name = models.CharField(max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.name} (Business ID: {self.business_id})"
 
 
-class OrderFormField(models.Model):
-    """
-    Order Form Field Model
-    ----------------------
-    Defines individual fields within an order form template.
-    Specifies field types, validation rules, and display order.
-    """
-    FIELD_TYPES = [
-        ('text', 'Text'),
-        ('number', 'Number'),
-        ('date', 'Date'),
-        ('dropdown', 'Dropdown'),
-    ]
-
-    template = models.ForeignKey(OrderFormTemplate, on_delete=models.CASCADE, related_name="fields")
-    label = models.CharField(max_length=255)
-    key = models.SlugField(max_length=255)  # e.g., 'material', 'delivery_date'
-    type = models.CharField(max_length=20, choices=FIELD_TYPES)
-    required = models.BooleanField(default=False)
-    description = models.TextField(blank=True, null=True)
-    order = models.PositiveIntegerField(default=0)
-
-    def save(self, *args, **kwargs):
-        if not self.key:
-            self.key = slugify(self.label)
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.label} ({self.type})"
-
-
-class OrderFieldPosition(models.Model):
-    """
-    Order Field Position Model
-    --------------------------
-    Defines the position of form fields on uploaded PDF templates.
-    Stores coordinates for placing dynamic content on PDF forms.
-    """
-    order_form_template = models.ForeignKey(OrderFormTemplate, on_delete=models.CASCADE, related_name="field_positions")
-    template_upload = models.ForeignKey('TemplateUpload', on_delete=models.CASCADE, related_name='field_positions', null=True, blank=True)
-    field_key = models.CharField(max_length=255, default="unknown")  # Must match OrderFormField.key
-    x = models.FloatField(help_text="X coordinate in PDF points")
-    y = models.FloatField(help_text="Y coordinate in PDF points")
-    page = models.IntegerField(default=1)
-
-    def __str__(self):
-        return f"{self.field_key} @ ({self.x}, {self.y}) on page {self.page}"
 
 
 # =============================================================================
 # ORDER MODELS
 # =============================================================================
 
-class OrderNumberConfig(models.Model):
+
+class NumberConfig(models.Model):
     """
-    Order Number Configuration Model
+    Unified Number Configuration Model
     --------------------------------
-    Manages automatic order number generation for businesses.
-    Tracks current sequence and prefix for order numbering.
+    Manages automatic numbering for different document types.
+    Supports order numbers, manufacturer invoices, and customer invoices.
     """
-    business = models.OneToOneField(Business, on_delete=models.CASCADE, related_name='order_number_config')
+    CONFIG_TYPE_CHOICES = [
+        ('order', 'Order Number'),
+        ('manufacturer_invoice', 'Manufacturer Invoice Number'),
+    ]
+    
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='number_configs')
+    config_type = models.CharField(max_length=20, choices=CONFIG_TYPE_CHOICES)
     start_number = models.IntegerField(default=1)
     current_number = models.IntegerField(default=1)
     prefix = models.CharField(max_length=10, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ['business', 'config_type']
+
     def __str__(self):
-        return f"Order Config for {self.business.name}"
+        return f"{self.get_config_type_display()} for {self.business.name}"
 
     def get_next_number(self):
-        """Generate the next unique order number with atomic transaction"""
+        """Generate the next unique number with atomic transaction"""
         with transaction.atomic():
             # Lock the row for update
-            config = OrderNumberConfig.objects.select_for_update().get(pk=self.pk)
+            config = NumberConfig.objects.select_for_update().get(pk=self.pk)
             number = config.current_number
             config.current_number += 1
             config.save()
-            return f"{config.prefix or ''}{number}"
+            # Add hyphen between prefix and number for better formatting
+            if config.prefix:
+                return f"{config.prefix}-{number}"
+            else:
+                return str(number)
 
 
 class Order(models.Model):
@@ -287,6 +214,7 @@ class Order(models.Model):
         ("pending", "Pending"),
         ("in_production", "In Production"),
         ("shipped", "Shipped"),
+        ("delivered", "Delivered"),
         ("completed", "Completed")
     ]
 
@@ -296,15 +224,28 @@ class Order(models.Model):
     data = models.JSONField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     placed_by = models.CharField(max_length=20, choices=[("middleman", "Middleman"), ("manufacturer", "Manufacturer")])
+    order_type = models.CharField(max_length=20, choices=[("order_creator", "Order Creator"), ("dynamic_order_form", "Dynamic Order Form")], default="order_creator")
     order_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        """Override save to automatically generate order numbers"""
+        """Override save to automatically generate order numbers and track status changes"""
+        # Check if this is a new order or if status is being changed
+        is_new = self.pk is None
+        old_status = None
+        if not is_new:
+            try:
+                old_instance = Order.objects.get(pk=self.pk)
+                old_status = old_instance.status
+            except Order.DoesNotExist:
+                pass
+        
         if not self.order_number:
             try:
-                config, created = OrderNumberConfig.objects.get_or_create(
+                config, created = NumberConfig.objects.get_or_create(
                     business=self.business,
+                    config_type='order',
                     defaults={'start_number': 1, 'current_number': 1}
                 )
                 
@@ -315,6 +256,13 @@ class Order(models.Model):
                         self.order_number = config.get_next_number()
                         # Try to save with the generated number
                         super().save(*args, **kwargs)
+                        # Create initial status history entry for new orders
+                        OrderStatusHistory.objects.create(
+                            order=self,
+                            status=self.status,
+                            changed_by=self.customer,
+                            notes="Order created"
+                        )
                         return
                     except Exception as e:
                         if attempt == max_attempts - 1:
@@ -326,8 +274,161 @@ class Order(models.Model):
                 # If all else fails, use a timestamp-based number
                 self.order_number = f"ORD-{int(time.time())}"
                 super().save(*args, **kwargs)
+                # Create initial status history entry for new orders
+                OrderStatusHistory.objects.create(
+                    order=self,
+                    status=self.status,
+                    changed_by=self.customer,
+                    notes="Order created"
+                )
         else:
             super().save(*args, **kwargs)
+            # Note: Status history entries are now created by the views
+            # to ensure proper attribution of who made the change
 
     def __str__(self):
         return f"Order #{self.order_number} by {self.customer.username}"
+
+
+class OrderStatusHistory(models.Model):
+    """
+    Order Status History Model
+    --------------------------
+    Tracks the history of status changes for orders.
+    Provides accurate timestamps for order timeline display.
+    """
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='status_history')
+    status = models.CharField(max_length=20, choices=Order.STATUS_CHOICES)
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='order_status_changes')
+    changed_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+        verbose_name_plural = "Order Status Histories"
+
+    def __str__(self):
+        return f"Order #{self.order.order_number} - {self.status} at {self.changed_at}"
+
+
+class Invoice(models.Model):
+    """
+    Invoice Model
+    ------------
+    Represents invoices between businesses and customers.
+    Supports both manufacturer invoices and customer invoices.
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('paid', 'Paid'),
+        ('overdue', 'Overdue'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    INVOICE_TYPE_CHOICES = [
+        ('manufacturer_to_customer', 'Manufacturer to Customer'),
+    ]
+    
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='invoices')
+    invoice_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    invoice_type = models.CharField(max_length=30, choices=INVOICE_TYPE_CHOICES, default='manufacturer_to_customer')
+    
+    # Order relationships - support both single and multiple orders
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='invoices', null=True, blank=True)
+    related_orders = models.ManyToManyField(Order, related_name='related_invoices', blank=True)
+    
+    # Invoice details
+    customer_name = models.CharField(max_length=255, null=True)
+    bill_to = models.TextField(blank=True, null=True)
+    contact_info = models.CharField(max_length=255, blank=True, null=True)
+    po_number = models.CharField(max_length=255, blank=True, null=True)
+    invoice_date = models.DateField(auto_now_add=True, null=True, blank=True)
+    due_date = models.DateField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Line items and totals
+    line_items = models.JSONField(default=list, blank=True)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sales_tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    gross_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    advanced_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    # Additional information
+    payment_instructions = models.TextField(blank=True, null=True)
+    contact_for_questions = models.CharField(max_length=255, blank=True, null=True)
+    thank_you_message = models.TextField(blank=True, null=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Invoice {self.invoice_number} - {self.customer_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            # Only manufacturer invoices are supported
+            config_type = 'manufacturer_invoice'
+            
+            # Get or create number config for this business and config type
+            config, created = NumberConfig.objects.get_or_create(
+                business=self.business,
+                config_type=config_type,
+                defaults={
+                    'start_number': 1,
+                    'current_number': 1,
+                    'prefix': 'INV'
+                }
+            )
+            
+            self.invoice_number = config.get_next_number()
+        
+        # Calculate totals if line items are provided
+        if self.line_items:
+            from decimal import Decimal, ROUND_HALF_UP
+            # Use Decimal arithmetic for precise calculations
+            subtotal = Decimal('0')
+            for item in self.line_items:
+                item_amount = Decimal(str(item.get('amount', 0)))
+                subtotal += item_amount
+            
+            self.subtotal = subtotal
+            self.gross_total = subtotal + Decimal(str(self.sales_tax))
+            # Ensure balance due is never negative and properly formatted
+            self.balance_due = max(Decimal('0'), self.gross_total - Decimal(str(self.advanced_paid)))
+            self.amount = self.gross_total  # Keep amount field for backward compatibility
+        
+        # Ensure all decimal fields are properly formatted for calculations
+        from decimal import Decimal, ROUND_HALF_UP
+        # Convert all fields to Decimal for precise arithmetic
+        self.subtotal = Decimal(str(self.subtotal)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.sales_tax = Decimal(str(self.sales_tax)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.gross_total = Decimal(str(self.gross_total)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.advanced_paid = Decimal(str(self.advanced_paid)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.balance_due = Decimal(str(self.balance_due)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.amount = Decimal(str(self.amount)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        
+        super().save(*args, **kwargs)
+
+    def get_related_orders_display(self):
+        """Get a formatted string of related order numbers"""
+        orders = list(self.related_orders.all())
+        if self.order:
+            orders.append(self.order)
+        return ', '.join([f"#{order.order_number}" for order in orders]) if orders else 'No orders'
+
+    def get_total_orders(self):
+        """Get total number of orders related to this invoice"""
+        count = self.related_orders.count()
+        if self.order:
+            count += 1
+        return count
+
+
+# =============================================================================
+# END OF MODELS
+# =============================================================================

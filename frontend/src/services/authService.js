@@ -56,6 +56,15 @@ api.interceptors.response.use(
 );
 
 // Auth APIs
+export const sendRegistrationOTP = async (userData) => {
+  try {
+    const response = await api.post('/auth/send-registration-otp/', userData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Failed to send registration OTP' };
+  }
+};
+
 export const registerUser = async (userData) => {
   try {
     const response = await api.post('/auth/register/', userData);
@@ -74,14 +83,28 @@ export const verifyOTP = async (email, otp) => {
   }
 };
 
-export const loginUser = async (username, password, business_id = null) => {
+export const loginUser = async (username, password, business_id = null, role = null) => {
   const payload = { username, password };
   if (business_id) payload.business_id = business_id;
+  if (role) payload.role = role;
 
   try {
     const response = await api.post('/auth/login/', payload);
-    const { access, refresh } = response.data;
+    const { access, refresh, role: returnedRole, is_approved } = response.data;
 
+    // ✅ Block login if backend returned different role
+    if (role && returnedRole && role !== returnedRole) {
+      throw {
+        response: {
+          status: 400,
+          data: {
+            detail: `This account is a ${returnedRole}, not a ${role}.`
+          }
+        }
+      };
+    }
+
+    // ✅ Store tokens only if everything checks out
     if (access && refresh) {
       sessionStorage.setItem("accessToken", access);
       sessionStorage.setItem("refreshToken", refresh);
@@ -90,7 +113,24 @@ export const loginUser = async (username, password, business_id = null) => {
 
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Login failed' };
+    // Always throw an error object with a .response property for consistent frontend handling
+    if (error.response) {
+      throw error;
+    } else if (error.detail) {
+      throw {
+        response: {
+          status: 400,
+          data: { detail: error.detail }
+        }
+      };
+    } else {
+      throw {
+        response: {
+          status: 400,
+          data: { detail: error.message || 'Login failed' }
+        }
+      };
+    }
   }
 };
 
@@ -109,6 +149,15 @@ export const forgotPassword = async (email) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: 'Failed to send reset OTP' };
+  }
+};
+
+export const resendRegistrationOTP = async (email) => {
+  try {
+    const response = await api.post('/auth/resend-registration-otp/', { email });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Failed to resend registration OTP' };
   }
 };
 
@@ -134,17 +183,26 @@ export const getUserProfile = async () => {
   }
 };
 
-export const handleDeleteAccount = async () => {
-  const confirmDelete = window.confirm('⚠️ Are you sure you want to permanently delete your account? This cannot be undone.');
-  if (!confirmDelete) return;
+export const handleDeleteAccount = async (password) => {
   try {
-    await api.delete('/auth/delete-account/');
-    await logoutUser();
-    alert('Account deleted successfully.');
-    window.location.href = '/register';
+    // First verify the password
+    const verifyResponse = await api.post('/auth/verify-password/', { password });
+    
+    if (verifyResponse.data.valid) {
+      // Then delete the account with password verification
+      await api.delete('/auth/delete-account/', { data: { password } });
+      await logoutUser();
+      return { success: true, message: 'Account deleted successfully.' };
+    } else {
+      throw new Error('Incorrect password');
+    }
   } catch (err) {
     console.error('Failed to delete account:', err);
-    alert('Failed to delete account. Please try again.');
+    if (err.response?.status === 400) {
+      throw new Error('Incorrect password. Please try again.');
+    } else {
+      throw new Error('Failed to delete account. Please try again.');
+    }
   }
 };
 

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Folder, ChevronDown, ChevronRight, Plus, Edit, Trash2, X, AlertTriangle } from 'lucide-react';
-import ProductPreviewModal from './modals/ProductPreviewModal';
-import AddChoiceModal from './modals/AddChoiceModal';
-import CategoryModal from './modals/CategoryModal';
-import ProductModal from './modals/ProductModal';
+import ProductPreviewModal from '../CustomerManager/modals/ProductPreviewModal';
+import AddChoiceModal from '../CustomerManager/modals/AddChoiceModal';
+import CategoryModal from '../CustomerManager/modals/CategoryModal';
+import ProductModal from '../CustomerManager/modals/ProductModal';
 import api from '../../services/authService';
 
 const CategoryExplorer = ({

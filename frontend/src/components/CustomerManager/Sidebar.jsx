@@ -1,148 +1,278 @@
 // src/components/CustomerManager/Sidebar.jsx
-import React from "react";
-import { 
-  LayoutDashboard, ShoppingBag, ClipboardList, CreditCard, 
-  Bell, HelpCircle, Settings, ChevronLeft, ChevronRight 
+import React, { useState, useEffect } from 'react';
+import {
+    Grid3X3,
+    Package,
+    Settings,
+    ChevronDown,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    ClipboardList,
+    CreditCard,
+    LogOut,
+    Users,
+    ShieldCheck,
+    FileText,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Sidebar = ({
-  activeTab,
-  setActiveTab,
-  sidebarCollapsed,
-  setSidebarCollapsed,
-  productSubTab,
-  setProductSubTab,
-  userType = 'manufacturer',
-  businessName = "Your Business",
-  colors = {
-    primary: '#1C2E4A',
-    secondary: '#3b82f6',
-    accent: '#0F1A2B',
-    light: '#BDC4D4',
-    cream: '#D1CFC9',
-    textDark: '#1A202C',
-    textMedium: '#4A5568'
-  }
+    activeTab,
+    setActiveTab,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    colors,
+    business
 }) => {
-  const manufacturerMenuItems = [
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    { id: "products", label: "Products", icon: <ShoppingBag size={20} /> },
-    { id: "orders", label: "Orders", icon: <ClipboardList size={20} /> },
-    { id: "payments", label: "Payments", icon: <CreditCard size={20} /> },
-    { id: "settings", label: "Settings", icon: <Settings size={20} /> }
-  ];
+    const { logout } = useAuth();
+    const navigate = useNavigate();
+    const [openSubmenus, setOpenSubmenus] = useState({});
+    const [hoveredItem, setHoveredItem] = useState(null);
 
-  const customerMenuItems = [
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    { id: "products", label: "Products", icon: <ShoppingBag size={20} /> },
-    { id: "orders", label: "My Orders", icon: <ClipboardList size={20} /> },
-    { id: "payments", label: "Payments", icon: <CreditCard size={20} /> },
-    { id: "settings", label: "Settings", icon: <Settings size={20} /> },
-    { id: "notifications", label: "Notifications", icon: <Bell size={20} /> },
-    { id: "help", label: "Help Center", icon: <HelpCircle size={20} /> }
-  ];
+    useEffect(() => {
+        setOpenSubmenus({
+            products: activeTab === 'products'
+        });
+    }, []);
 
-  const menuItems = userType === 'manufacturer' ? manufacturerMenuItems : customerMenuItems;
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
 
-  const itemVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: (i) => ({
-      opacity: 1,
-      x: 0,
-      transition: {
-        delay: i * 0.05,
-        duration: 0.3
-      }
-    })
-  };
+    const navItems = [
+        { name: 'Dashboard', icon: Grid3X3, tab: 'dashboard' },
+        {
+            name: 'Products',
+            icon: Package,
+            tab: 'products',
+            subItems: [
+                { name: 'All Products', tab: 'products' },
+                { name: 'Templates', tab: 'templates' }
+            ]
+        },
+        { name: 'Orders', icon: ClipboardList, tab: 'orders' },
+        { name: 'Payments', icon: CreditCard, tab: 'payments'},
+        { name: 'Manufacturers', icon: Users, tab: 'manufacturers'},
+        { name: 'Settings', icon: Settings, tab: 'settings' },
+    ];
 
-  return (
-    <motion.div 
-      initial={{ opacity: 0, x: -50 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3 }}
-      className={`flex flex-col h-full transition-all duration-300 ease-in-out ${
-        sidebarCollapsed ? 'w-16' : 'w-64'
-      } bg-opacity-95 shadow-xl`}
-      style={{ 
-        background: `linear-gradient(to bottom, ${colors.primary}, ${colors.accent})`,
-        borderTopRightRadius: '12px',
-        borderBottomRightRadius: '12px'
-      }}
-    >
-      {/* Logo and Business Name Section */}
-      <div className={`p-4 flex ${sidebarCollapsed ? 'justify-center' : 'justify-start'} items-center border-b`} 
-        style={{ borderColor: `${colors.light}20` }}>
-        <motion.div whileHover={{ scale: 1.05 }} className="flex items-center">
-          <div className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg ${
-            sidebarCollapsed ? 'mx-auto' : ''
-          }`} style={{ background: colors.cream, color: colors.primary }}>
-            <ShoppingBag size={24} />
-          </div>
-          {!sidebarCollapsed && (
-            <div className="ml-3 overflow-hidden">
-              <h2 className="text-lg font-semibold truncate text-white">{businessName}</h2>
-              <p className="text-xs text-gray-300 truncate">Customer Portal</p>
-            </div>
-          )}
-        </motion.div>
-      </div>
+    const toggleSubmenu = (tab) => {
+        setOpenSubmenus(prev => ({
+            ...prev,
+            [tab]: !prev[tab]
+        }));
+    };
 
-      {/* Collapse toggle button */}
-      <div className="px-4 py-3 flex justify-end">
-        <motion.button 
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="p-1.5 rounded-full transition-all duration-300"
-          style={{ background: colors.light, color: colors.primary, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
-          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+    const Badge = ({ count, color }) => (
+        <span 
+            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full text-white ml-auto"
+            style={{ backgroundColor: color, minWidth: '20px', height: '20px' }}
         >
-          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </motion.button>
-      </div>
+            {count}
+        </span>
+    );
 
-      {/* Navigation */}
-      <nav className="mt-2 flex-1 px-2 overflow-y-auto">
-        <ul className="space-y-1">
-          {menuItems.map((item, index) => (
-            <motion.li 
-              key={item.id}
-              custom={index}
-              initial="hidden"
-              animate="visible"
-              variants={itemVariants}
-            >
-              <motion.button
-                whileHover={{ scale: sidebarCollapsed ? 1.1 : 1.02, x: sidebarCollapsed ? 0 : 5 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setActiveTab(item.id)}
-                className={`flex items-center w-full p-3 rounded-xl transition-all duration-200 ${
-                  activeTab === item.id 
-                    ? "bg-white/20 text-white shadow-md"
-                    : "text-white/80 hover:text-white hover:bg-white/10"
-                }`}
-                style={{ borderLeft: activeTab === item.id ? `3px solid ${colors.secondary}` : 'none' }}
-              >
-                <span className={`transition-all duration-200 ${activeTab === item.id ? 'scale-110' : 'scale-100'}`}>
-                  {React.cloneElement(item.icon, { 
-                    color: activeTab === item.id ? 'white' : colors.light,
-                    strokeWidth: activeTab === item.id ? 2.5 : 2
-                  })}
-                </span>
-                {!sidebarCollapsed && (
-                  <span className="ml-3 text-sm font-medium tracking-wide truncate">
-                    {item.label}
-                  </span>
+    // Get first letter of business name
+    const getBusinessInitial = () => {
+        if (business?.name) {
+            return business.name.charAt(0).toUpperCase();
+        }
+        return 'C'; // Default to 'C' for Customer Manager
+    };
+
+    const NavItem = ({ item }) => {
+        const isActive = activeTab === item.tab || (item.subItems && item.subItems.some(sub => activeTab === sub.tab));
+        const isSubmenuOpen = openSubmenus[item.tab] || false;
+
+        const handleItemClick = () => {
+            if (item.subItems) {
+                toggleSubmenu(item.tab);
+                if (!item.subItems.some(sub => sub.tab === activeTab)) {
+                    setActiveTab(item.subItems[0].tab);
+                }
+            } else {
+                setActiveTab(item.tab);
+            }
+        };
+        
+        const handleSubItemClick = (e, subTab) => {
+            e.stopPropagation();
+            setActiveTab(subTab);
+        };
+
+        return (
+            <div className="relative">
+                <div
+                    onClick={handleItemClick}
+                    onMouseEnter={() => setHoveredItem(item.tab)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    className={`flex flex-col text-sm font-medium rounded-lg cursor-pointer transition-all duration-200 ${
+                        isActive 
+                            ? 'text-white' 
+                            : hoveredItem === item.tab 
+                                ? 'text-gray-200' 
+                                : 'text-gray-300 hover:text-white'
+                    }`}
+                    style={{
+                        backgroundColor: isActive ? colors.dark : 'transparent'
+                    }}
+                >
+                    <div className="flex items-center justify-between p-3">
+                        <div className="flex items-center flex-1">
+                            <item.icon size={20} className="mr-3 flex-shrink-0" />
+                            {!sidebarCollapsed && (
+                                <span className="truncate">{item.name}</span>
+                            )}
+                            {!sidebarCollapsed && item.badge && (
+                                <Badge count={item.badge.count} color={item.badge.color} />
+                            )}
+                        </div>
+                        {!sidebarCollapsed && item.subItems && (
+                            <div className="ml-2 flex-shrink-0">
+                                {isSubmenuOpen ? (
+                                    <ChevronDown size={16} className="transition-transform duration-200" />
+                                ) : (
+                                    <ChevronRight size={16} className="transition-transform duration-200" />
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {!sidebarCollapsed && item.subItems && isSubmenuOpen && (
+                        <div className="pb-2 space-y-1">
+                            {item.subItems.map(subItem => (
+                                <div
+                                    key={subItem.name}
+                                    onClick={(e) => handleSubItemClick(e, subItem.tab)}
+                                    className={`mx-3 rounded-md p-2 pl-11 transition-colors duration-200 flex items-center justify-between cursor-pointer ${
+                                        activeTab === subItem.tab
+                                            ? 'text-white font-semibold'
+                                            : 'text-gray-300 hover:text-white'
+                                    }`}
+                                    style={{
+                                        backgroundColor: activeTab === subItem.tab ? colors.dark : 'transparent'
+                                    }}
+                                >
+                                    <span className="truncate">{subItem.name}</span>
+                                    {subItem.badge && (
+                                        <Badge count={subItem.badge.count} color={subItem.badge.color} />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {sidebarCollapsed && hoveredItem === item.tab && (
+                    <div className="absolute left-full top-0 ml-2 px-3 py-2 text-sm rounded-lg whitespace-nowrap z-50 shadow-lg bg-gray-800 text-white">
+                        <div className="flex items-center">
+                            <span>{item.name}</span>
+                            {item.badge && (
+                                <Badge count={item.badge.count} color={item.badge.color} />
+                            )}
+                        </div>
+                        {item.subItems && (
+                            <div className="mt-2 pl-2 border-l border-gray-600 space-y-1">
+                                {item.subItems.map(sub => (
+                                    <div key={sub.name} className="py-1 flex items-center justify-between">
+                                        <span className="text-xs">{sub.name}</span>
+                                        {sub.badge && (
+                                            <Badge count={sub.badge.count} color={sub.badge.color} />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
-              </motion.button>
-            </motion.li>
-          ))}
-        </ul>
-      </nav>
-    </motion.div>
-  );
+            </div>
+        );
+    };
+
+    return (
+        <div
+            className={`flex flex-col justify-between h-full transition-all duration-300 border-r border-gray-200 ${
+                sidebarCollapsed ? 'w-20' : 'w-64'
+            }`}
+            style={{ backgroundColor: colors.primary }}
+        >
+            <div className="p-4">
+                {/* Logo/Brand Section */}
+                <div className="flex items-center justify-between mb-8">
+                    {!sidebarCollapsed ? (
+                        <div className="flex items-center overflow-hidden">
+                            <div 
+                                className="w-8 h-8 mr-3 flex-shrink-0 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                                style={{ backgroundColor: colors.accent }}
+                            >
+                                {getBusinessInitial()}
+                            </div>
+                            <div className="overflow-hidden">
+                                <h1 className="text-lg font-semibold text-white truncate">
+                                    {business?.name || 'Customer Manager'}
+                                </h1>
+                                <p className="text-xs text-gray-300 truncate">Customer Portal</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="w-full flex justify-center">
+                            <div 
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                                style={{ backgroundColor: colors.accent }}
+                            >
+                                {getBusinessInitial()}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <button
+                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        className="p-1.5 rounded-lg hover:bg-gray-700 transition-colors flex-shrink-0 text-gray-300"
+                        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        {sidebarCollapsed ? (
+                            <ChevronsRight size={14} />
+                        ) : (
+                            <ChevronsLeft size={14} />
+                        )}
+                    </button>
+                </div>
+
+                {/* Navigation */}
+                <nav className="space-y-1">
+                    {navItems.map(item => (
+                        <NavItem key={item.name} item={item} />
+                    ))}
+                </nav>
+            </div>
+
+            {/* Logout Section */}
+            <div className="p-4 border-t border-gray-700/50">
+                <div
+                    onClick={handleLogout}
+                    onMouseEnter={() => setHoveredItem('logout')}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    className={`flex items-center p-3 text-sm font-medium rounded-lg cursor-pointer transition-colors duration-200 ${
+                        hoveredItem === 'logout' 
+                            ? 'bg-red-600 text-white' 
+                            : 'text-gray-300 hover:text-white hover:bg-red-500'
+                    }`}
+                >
+                    <LogOut size={20} className="mr-3 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>Logout</span>}
+                    
+                    {sidebarCollapsed && hoveredItem === 'logout' && (
+                        <div className="absolute left-full top-0 ml-2 px-3 py-2 text-sm rounded-lg whitespace-nowrap z-50 shadow-lg bg-red-600 text-white">
+                            Logout
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default Sidebar;

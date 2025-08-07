@@ -1,23 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Settings from './Settings';
 import Dashboard from './Dashboard';
-import TemplateManagement from './TemplateManagement';
-import TemplateModal from './modals/TemplateModal';
-import ProductManagement from './ProductManagement';
-import ProductModal from './modals/ProductModal';
-import ProductPreviewModal from './modals/ProductPreviewModal';
-import PreviewModal from './modals/PreviewModal';
-import AddChoiceModal from './modals/AddChoiceModal';
-import CategoryModal from './modals/CategoryModal';
-import OrderFormBuilder from "./modals/OrderFormBuilder";
 import OrderManagement from './OrderManagement';
-import api from '../../services/authService';
-import CustomerManagement from './CustomerManagement';
-import PaymentManagement from './PaymentManagement';
+import InvoiceManagement from './InvoiceManagement';
+import ProductManagement from './ProductManagement';
+import Settings from './Settings';
+import ProductPreviewModal from '../CustomerManager/modals/ProductPreviewModal';
+import InvoiceCreator from './modals/InvoiceCreator';
 import { FileText, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
+import api from '../../services/authService';
 
 const BusinessManager = () => {
   const { businessId } = useParams();
@@ -28,19 +21,19 @@ const BusinessManager = () => {
   const [productMenuExpanded, setProductMenuExpanded] = useState(true);
   const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddChoiceModal, setShowAddChoiceModal] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+
+
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
+
   const [previewItem, setPreviewItem] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [products, setProducts] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [categories, setCategories] = useState([]);
+  // InvoiceCreator moved to InvoiceManagement component
+
+
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [pendingCustomers, setPendingCustomers] = useState([]);
@@ -60,22 +53,24 @@ const BusinessManager = () => {
     hover: "#2D3748"
   };
 
-  const fetchCategories = async () => {
-    try {
-      const response = await api.get(`/management/product-categories/?business=${businessId}`);
-      setCategories(response.data);
-    } catch (err) {
-      console.error("Error fetching categories:", err);
-    }
-  };
+
 
   const fetchBusiness = async () => {
     try {
-      const response = await api.get(`/management/manufacturer/businesses/`);
-      const business = response.data.results.find(b => b.id === parseInt(businessId, 10));
-      setBusiness(business || null);
+      const role = sessionStorage.getItem('role');
+      let endpoint;
+      
+      if (role === 'manufacturer') {
+        endpoint = `/business/manufacturer/businesses/${businessId}/`;
+      } else {
+        endpoint = `/management/customer/business/${businessId}/`;
+      }
+      
+      const response = await api.get(endpoint);
+      setBusiness(response.data || null);
     } catch (err) {
       console.error("Error fetching business:", err);
+      setBusiness(null);
     } finally {
       setLoading(false);
     }
@@ -83,107 +78,116 @@ const BusinessManager = () => {
 
   const fetchData = async () => {
     try {
-      const [templatesRes, productsRes] = await Promise.all([
-        api.get(`/management/product-templates/?business=${businessId}`),
-        api.get(`/management/products/?business=${businessId}`),
-      ]);
+      console.log('Fetching products for business:', businessId);
+      const productsRes = await api.get(`/management/products/?business=${businessId}`);
+      console.log('Products response:', productsRes.data);
       
-      const processedTemplates = templatesRes.data.map(template => ({
-        id: template.id,
-        name: template.name,
-        fields: template.fields || [],
-        created_at: template.created_at || template.uploaded_at || new Date().toISOString(),
-        status: template.status || 'draft',
-        business: template.business || businessId
-      }));
-
-      setTemplates(processedTemplates);
-      setProducts(productsRes.data);
-      await fetchCategories();
+      // Ensure we're getting an array
+      const productsArray = Array.isArray(productsRes.data) ? productsRes.data : [];
+      console.log('Products array length:', productsArray.length);
+      
+      setProducts(productsArray);
     } catch (err) {
       console.error("Error fetching data:", err);
+      setProducts([]); // Set empty array on error
     }
   };
 
   const fetchOrders = async () => {
     try {
-      const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
-      setOrders(response.data);
+      console.log('Fetching orders for business:', businessId);
+      const role = sessionStorage.getItem('role');
+      if (role === 'manufacturer') {
+        const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
+        console.log('Orders response:', response.data);
+        
+        // Ensure we're getting an array
+        const ordersArray = Array.isArray(response.data) ? response.data : [];
+        console.log('Orders array length:', ordersArray.length);
+        
+        setOrders(ordersArray);
+      } else {
+        setOrders([]); // Customers don't fetch orders here
+      }
     } catch (err) {
       console.error("Error fetching orders:", err);
+      setOrders([]);
     }
   };
 
   useEffect(() => {
     if (businessId) {
+      console.log('BusinessManager: Loading data for business ID:', businessId);
       fetchBusiness();
       fetchData();
       fetchOrders();
     }
   }, [businessId]);
 
-  const handleDeleteCategory = async (category, force = false) => {
-    try {
-      const url = `/management/product-categories/${category.id}/${force ? '?force=true' : ''}`;
-      const response = await api.delete(url);
-      
-      if (response.status === 200) {
-        setCategories(prev => prev.filter(c => c.id !== category.id));
-        if (force) {
-          setProducts(prev => prev.filter(p => p.category?.id !== category.id));
-        }
-        return { success: true, message: response.data.detail };
-      }
-      throw new Error('Unexpected response from server');
-    } catch (err) {
-      if (err.response) {
-        return {
-          success: false,
-          error: err.response.data.detail || 'Failed to delete category',
-          requiresForce: err.response.data.requires_force || false,
-          productsCount: err.response.data.products_count || 0,
-          subcategoriesCount: err.response.data.subcategories_count || 0
-        };
-      }
-      return { success: false, error: 'Network error while deleting category' };
-    }
-  };
 
-  const onCreateCategory = async (categoryData) => {
+
+
+
+  const onCreateProduct = async (productData) => {
     setIsSaving(true);
     try {
-      const { business, ...payload } = categoryData;
-      const response = await api.post('/management/product-categories/', payload);
-      setCategories([...categories, response.data]);
-      setShowCategoryModal(false);
+      const response = await api.post('/management/products/', productData);
+      setProducts([...products, response.data]);
+      setShowAddForm(false);
       return response.data;
     } catch (err) {
-      console.error("Error creating category:", err);
+      console.error("Error creating product:", err);
       throw err;
     } finally {
       setIsSaving(false);
     }
   };
 
-  const onUpdateCategory = async (categoryData) => {
+  const onUpdateProduct = async (productData) => {
     setIsSaving(true);
     try {
-      const response = await api.put(`/management/product-categories/${categoryData.id}/`, categoryData);
-      setCategories(categories.map(c => c.id === response.data.id ? response.data : c));
-      setShowCategoryModal(false);
+      const response = await api.put(`/management/products/${productData.id}/?business=${businessId}`, productData);
+      setProducts(products.map(p => p.id === response.data.id ? response.data : p));
+      setShowAddForm(false);
       return response.data;
     } catch (err) {
-      console.error("Error updating category:", err);
+      console.error("Error updating product:", err);
       throw err;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const onDeleteProduct = async (productId) => {
+    try {
+      await api.delete(`/management/products/${productId}/?business=${businessId}`);
+      setProducts(products.filter(p => p.id !== productId));
+    } catch (err) {
+      console.error("Error deleting product:", err);
+      throw err;
+    }
+  };
+
+
+
+  const handleLogout = () => {
+    // Clear localStorage or any auth tokens
+    localStorage.clear();
+    // Optionally: call a logout API endpoint here
+    navigate('/login');
+  };
+
+  // Invoice creation handled by InvoiceManagement component
+  const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
+
+  const handleCreateInvoiceFromHeader = () => {
+    setShowInvoiceCreator(true);
   };
 
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar
-        businessName={business?.name || "Loading..."}
+        businessName={business?.name || ""}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         sidebarCollapsed={sidebarCollapsed}
@@ -200,8 +204,6 @@ const BusinessManager = () => {
           activeTab={activeTab}
           productSubTab={productSubTab}
           businessName={business?.name || "Loading..."}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
           setShowAddForm={() => {
             if (activeTab === 'products' && productSubTab === 'templates') {
               setSelectedTemplate(null);
@@ -212,91 +214,39 @@ const BusinessManager = () => {
             }
           }}
           products={products}
-          templates={templates}
           orders={orders}
           customers={customers}
           colors={colors}
+          onLogout={handleLogout}
+          onCreateInvoice={handleCreateInvoiceFromHeader}
         />
 
         {activeTab === "dashboard" && (
           <Dashboard 
             businessName={business?.name} 
             products={products}
-            customers={customers} 
-          />
-        )}
-        
-        {activeTab === "products" && productSubTab === "templates" && (
-          <TemplateManagement
-            templates={templates}
-            searchQuery={searchQuery}
-            onEdit={(template) => {
-              setSelectedTemplate(template);
-              setShowAddForm(true);
-            }}
-            onDelete={async (id) => {
-              try {
-                await api.delete(`/management/product-templates/${id}/`);
-                setTemplates(templates.filter(t => t.id !== id));
-              } catch (err) {
-                console.error("Delete error:", err);
-              }
-            }}
-            colors={colors}
-            setShowAddForm={setShowAddForm}
-            setSelectedTemplate={setSelectedTemplate}
-            handlePreviewItem={(item) => {
-              setPreviewItem(item);
-              setShowPreview(true);
-            }}
+            customers={customers}
+            orders={orders}
+            businessId={businessId}
+            setActiveTab={setActiveTab}
           />
         )}
 
-        {activeTab === "products" && productSubTab === "products" && (
+        {activeTab === "products" && (
           <ProductManagement
             products={products}
-            categories={categories}
-            templates={templates}
-            searchQuery={searchQuery}
-            onEdit={(product) => {
-              setSelectedProduct(product);
-            }}
-            onDelete={async (id) => {
-              try {
-                await api.delete(`/management/products/${id}/`);
-                setProducts(products.filter(p => p.id !== id));
-              } catch (err) {
-                console.error("Delete error:", err);
-              }
-            }}
-            handlePreviewItem={(item) => {
-              setPreviewItem(item);
+            categories={[]}
+            templates={[]}
+            handlePreviewItem={(product) => {
+              setPreviewItem(product);
               setShowPreview(true);
             }}
-            setShowAddForm={setShowAddForm}
-            selectedProduct={selectedProduct}
             colors={colors}
-            onCreateProduct={async (productData) => {
-              setIsSaving(true);
-              try {
-                const response = await api.post('/management/products/', productData);
-                setProducts([response.data, ...products]);
-                setShowAddForm(false);
-                return response.data;
-              } catch (err) {
-                console.error("Error creating product:", err);
-                throw err;
-              } finally {
-                setIsSaving(false);
-              }
-            }}
-            onCreateCategory={onCreateCategory}
-            onEditCategory={onUpdateCategory}
-            onDeleteCategory={handleDeleteCategory}
-            onReloadCategories={fetchCategories}
             businessId={businessId}
           />
         )}
+
+
 
         {activeTab === "orders" && (
           <OrderManagement
@@ -306,172 +256,33 @@ const BusinessManager = () => {
           />
         )}
 
-        {activeTab === "customers" && (
-          <CustomerManagement
-            businessId={businessId}
-            inviteCode={business?.invite_code}
-            colors={colors}
-            pendingCustomers={pendingCustomers}
-          />
-        )}
+        {activeTab === "manufacturers" && null}
 
         {activeTab === "payments" && (
-          <PaymentManagement />
+          <InvoiceManagement 
+            businessId={businessId} 
+            colors={colors} 
+            showInvoiceCreator={showInvoiceCreator}
+            setShowInvoiceCreator={setShowInvoiceCreator}
+          />
         )}
 
         {activeTab === "settings" && (
-        <Settings businessId={businessId} />
-        )}
-
-
-        {showAddChoiceModal && (
-          <AddChoiceModal
-            onClose={() => setShowAddChoiceModal(false)}
-            onSelectCategory={() => {
-              setShowAddChoiceModal(false);
-              setSelectedCategory(null);
-              setShowCategoryModal(true);
-            }}
-            onSelectProduct={() => {
-              setShowAddChoiceModal(false);
-              setSelectedProduct(null);
-              setShowAddForm(true);
-            }}
-            colors={colors}
-          />
-        )}
-
-        {showCategoryModal && (
-          <CategoryModal
-            businessId={businessId}
-            categories={categories}
-            onClose={() => {
-              setShowCategoryModal(false);
-              setSelectedCategory(null);
-            }}
-            onSave={selectedCategory ? onUpdateCategory : onCreateCategory}
-            colors={colors}
-            initialCategory={selectedCategory}
-          />
-        )}
-
-        {showAddForm && productSubTab === "templates" && (
-          <TemplateModal
-            businessId={businessId}
-            selectedTemplate={selectedTemplate}
-            setSelectedTemplate={setSelectedTemplate}
-            setShowAddForm={setShowAddForm}
-            templates={templates}
-            setTemplates={setTemplates}
-            colors={colors}
-            isSaving={isSaving}
-            setIsSaving={setIsSaving}
-            onCreateTemplate={async (templateData) => {
-              try {
-                const response = await api.post('/management/product-templates/', templateData);
-                const newTemplate = {
-                  ...response.data,
-                  fields: response.data.fields || [],
-                  created_at: response.data.created_at || new Date().toISOString(),
-                  status: response.data.status || 'draft'
-                };
-                setTemplates(prev => [newTemplate, ...prev]);
-                setShowAddForm(false);
-                return newTemplate;
-              } catch (err) {
-                console.error("Error creating template:", err);
-                throw err;
-              }
-            }}
-            onUpdateTemplate={async (templateData) => {
-              try {
-                const updatedTemplate = {
-                  ...templateData,
-                  fields: templateData.fields.map(field => ({
-                    id: field.id,
-                    label: field.label,
-                    type: field.type,
-                    required: field.required || false,
-                    options: field.options || [],
-                    currency_symbol: field.currency_symbol || "$",
-                    decimal_places: field.decimal_places || 2,
-                    order: field.order || 0
-                  }))
-                };
-
-                const response = await api.put(`/management/product-templates/${templateData.id}/`, updatedTemplate);
-                setTemplates(templates.map(t => t.id === response.data.id ? response.data : t));
-                setSelectedTemplate(null);
-                setShowAddForm(false);
-              } catch (err) {
-                console.error("Error updating template:", err);
-                throw err;
-              }
-            }}
-            api={api}
-          />
-        )}
-
-        {showAddForm && productSubTab === "products" && (
-          <ProductModal
-            businessId={businessId}
-            templates={templates}
-            categories={categories}
-            selectedProduct={selectedProduct}
-            setShowAddForm={setShowAddForm}
-            onCreateProduct={async (productData) => {
-              setIsSaving(true);
-              try {
-                const response = await api.post('/management/products/', productData);
-                setProducts([response.data, ...products]);
-                setShowAddForm(false);
-                return response.data;
-              } catch (err) {
-                console.error("Error creating product:", err);
-                throw err;
-              } finally {
-                setIsSaving(false);
-              }
-            }}
-            onUpdateProduct={async (formData, productId) => {
-              setIsSaving(true);
-              try {
-                const response = await api.put(`/management/products/${productId}/`, formData);
-                setProducts(products.map(p => p.id === response.data.id ? response.data : p));
-                setSelectedProduct(null);
-                setShowAddForm(false);
-                return response.data;
-              } catch (err) {
-                console.error("Error updating product:", err);
-                throw err;
-              } finally {
-                setIsSaving(false);
-              }
-            }}            
-            isSaving={isSaving}
-            setIsSaving={setIsSaving}
-            colors={colors}
-          />
-        )}
-
-        {showPreview && previewItem && productSubTab === "products" && (
-          <ProductPreviewModal 
-            previewItem={previewItem}
-            setPreviewItem={setPreviewItem}
-            setShowPreview={setShowPreview}
-            colors={colors}
-          />
-        )}
-
-        {showPreview && previewItem && productSubTab === "templates" && (
-          <PreviewModal
-            previewItem={previewItem}
-            setPreviewItem={setPreviewItem}
-            setShowPreview={setShowPreview}
-            colors={colors}
-          />
+          <Settings businessId={businessId} />
         )}
       </div>
+
+      {/* Product Preview Modal */}
+      {showPreview && previewItem && (
+        <ProductPreviewModal
+          previewItem={previewItem}
+          setPreviewItem={setPreviewItem}
+          setShowPreview={setShowPreview}
+          colors={colors}
+        />
+      )}
+
+      {/* Invoice Creator Modal - REMOVED: Using InvoiceManagement's InvoiceCreator instead */}
     </div>
   );
 };

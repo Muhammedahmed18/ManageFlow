@@ -2,14 +2,37 @@ from rest_framework import serializers
 from .models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
-from business.models import Business  # ✅ moved import to top
+from business.models import Business
+
+
+class UserSerializer(serializers.ModelSerializer):
+    business = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'password', 'role', 'is_approved', 'business')
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def get_business(self, obj):
+        from business.serializers import BusinessSerializer
+        business = Business.objects.filter(owner=obj).first()
+        if business:
+            return BusinessSerializer(business).data
+        return None
+
+    def create(self, validated_data):
+        user = User.objects.create_user(**validated_data)
+        user.is_approved = (user.role == 'customer')
+        user.save()
+        return user
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'role']
+        fields = ['username', 'email', 'password', 'role', 'first_name', 'last_name']
 
     def create(self, validated_data):
         role = validated_data.get('role')
@@ -17,7 +40,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User(
             username=validated_data['username'],
             email=validated_data['email'],
-            role=role
+            role=role,
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
         )
 
         if role == 'manufacturer':
@@ -26,40 +51,33 @@ class RegisterSerializer(serializers.ModelSerializer):
             user.is_approved = False  # Customers still need approval
 
         user.set_password(validated_data['password'])
+        
+        # Generate OTP for email verification
+        import random
+        user.otp = str(random.randint(100000, 999999))
+        
+        # Save user with email_verified=False
+        user.email_verified = False
         user.save()
         return user
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    business_id = serializers.CharField(write_only=True, required=False)
 
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         username = attrs.get("username")
         password = attrs.get("password")
-        business_id = self.initial_data.get("business_id")
+        role = attrs.get("role")
 
         user = authenticate(username=username, password=password)
 
         if not user:
             raise serializers.ValidationError("Invalid username or password.")
 
-        if user.role == 'customer':
-            if not business_id:
-                raise serializers.ValidationError({"business_id": "Business invite code is required for customers."})
+        # Role mismatch check
+        if role and user.role != role:
+            raise serializers.ValidationError(f"This account is a {user.role}, not a {role}.")
 
-            try:
-                business = Business.objects.get(invite_code=business_id)
-            except Business.DoesNotExist:
-                raise serializers.ValidationError({"business_id": "Invalid business invite code."})
-
-            if not user.business:
-                user.business = business
-                user.save()
-            elif user.business != business:
-                raise serializers.ValidationError({"business_id": "This customer is not linked to that business."})
-
-        # ✅ Let login proceed regardless of approval (frontend handles it)
         data = super().validate(attrs)
         data['is_approved'] = bool(user.is_approved)
         data['role'] = user.role
-        data['business_id'] = user.business_id
         return data

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { registerUser } from '../services/authService';
+import { sendRegistrationOTP } from '../services/authService';
 import { Factory, ShoppingCart, ArrowRight, UserPlus, User, Mail, Lock, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
 import colors from '../assets/colors';
@@ -11,13 +11,17 @@ const RegisterPage = () => {
     username: '',
     email: '',
     password: '',
+    first_name: '',
+    last_name: '',
     role: 'manufacturer'
   });
   const [errors, setErrors] = useState({
     username: '',
     email: '',
     password: '',
-    general: ''
+    general: '',
+    first_name: '',
+    last_name: ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -35,12 +39,21 @@ const RegisterPage = () => {
 
   const handleRoleChange = (selectedRole) => {
     setFormData({ ...formData, role: selectedRole });
-    setErrors({ username: "", email: "", password: "", general: "" });
+    setErrors({ username: "", email: "", password: "", general: "", first_name: "", last_name: "" });
   };
 
   const validateForm = () => {
     let isValid = true;
-    const newErrors = { username: "", email: "", password: "", general: "" };
+    const newErrors = { username: "", email: "", password: "", general: "", first_name: "", last_name: "" };
+
+    if (!formData.first_name.trim()) {
+      newErrors.first_name = "First name is required";
+      isValid = false;
+    }
+    if (!formData.last_name.trim()) {
+      newErrors.last_name = "Last name is required";
+      isValid = false;
+    }
 
     if (!formData.username.trim()) {
       newErrors.username = "Username is required";
@@ -73,7 +86,7 @@ const RegisterPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setErrors({ username: "", email: "", password: "", general: "" });
+    setErrors({ username: "", email: "", password: "", general: "", first_name: "", last_name: "" });
 
     if (!validateForm()) {
       setLoading(false);
@@ -81,12 +94,12 @@ const RegisterPage = () => {
     }
 
     try {
-      await registerUser(formData);
+      const response = await sendRegistrationOTP(formData);
       storeRegistrationEmail(formData.email);
       navigate('/verify-otp');
     } catch (error) {
-      let errorMsg = 'Registration failed. Please try again.';
-      const newErrors = { username: "", email: "", password: "", general: "" };
+      let errorMsg = 'Failed to send registration OTP. Please try again.';
+      const newErrors = { username: "", email: "", password: "", general: "", first_name: "", last_name: "" };
       
       if (error.response && error.response.data) {
         const data = error.response.data;
@@ -100,6 +113,10 @@ const RegisterPage = () => {
               newErrors.email = data.email.join(' ');
             } else if (field === 'password') {
               newErrors.password = data.password.join(' ');
+            } else if (field === 'first_name') {
+              newErrors.first_name = data.first_name.join(' ');
+            } else if (field === 'last_name') {
+              newErrors.last_name = data.last_name.join(' ');
             } else {
               newErrors.general = Object.values(data).flat().join(' ');
             }
@@ -235,17 +252,49 @@ const RegisterPage = () => {
             className="space-y-4"
           >
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Username</label>
+              <label htmlFor="first_name" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>First Name</label>
+              <input
+                id="first_name"
+                type="text"
+                name="first_name"
+                placeholder="Enter your first name"
+                value={formData.first_name}
+                onChange={handleChange}
+                autoComplete="given-name"
+                className={`w-full px-4 py-3 bg-white rounded-lg border focus:ring-1 outline-none transition ${errors.first_name ? 'border-rose-300 focus:ring-rose-200' : 'border-gray-200 focus:ring-primary'}`}
+                style={{ color: colors.text, backgroundColor: colors.white }}
+              />
+              {errors.first_name && <p className="text-xs text-rose-500 mt-1">{errors.first_name}</p>}
+            </div>
+            <div>
+              <label htmlFor="last_name" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Last Name</label>
+              <input
+                id="last_name"
+                type="text"
+                name="last_name"
+                placeholder="Enter your last name"
+                value={formData.last_name}
+                onChange={handleChange}
+                autoComplete="family-name"
+                className={`w-full px-4 py-3 bg-white rounded-lg border focus:ring-1 outline-none transition ${errors.last_name ? 'border-rose-300 focus:ring-rose-200' : 'border-gray-200 focus:ring-primary'}`}
+                style={{ color: colors.text, backgroundColor: colors.white }}
+              />
+              {errors.last_name && <p className="text-xs text-rose-500 mt-1">{errors.last_name}</p>}
+            </div>
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Username</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
                   color: errors.username ? colors.error : colors.textLighter 
                 }} />
                 <input
+                  id="username"
                   type="text"
                   name="username"
                   placeholder="Enter your username"
                   value={formData.username}
                   onChange={handleChange}
+                  autoComplete="username"
                   className={`w-full pl-10 pr-4 py-3 bg-white rounded-lg border focus:ring-1 outline-none transition ${
                     errors.username 
                       ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-300' 
@@ -271,17 +320,19 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Email</label>
+              <label htmlFor="email" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
                   color: errors.email ? colors.error : colors.textLighter 
                 }} />
                 <input
+                  id="email"
                   type="email"
                   name="email"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={handleChange}
+                  autoComplete="email"
                   className={`w-full pl-10 pr-4 py-3 bg-white rounded-lg border focus:ring-1 outline-none transition ${
                     errors.email 
                       ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-300' 
@@ -307,17 +358,19 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Password</label>
+              <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
                   color: errors.password ? colors.error : colors.textLighter 
                 }} />
                 <input
+                  id="password"
                   type="password"
                   name="password"
                   placeholder="Create a password (min 6 characters)"
                   value={formData.password}
                   onChange={handleChange}
+                  autoComplete="new-password"
                   className={`w-full pl-10 pr-4 py-3 bg-white rounded-lg border focus:ring-1 outline-none transition ${
                     errors.password 
                       ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-300' 
@@ -370,7 +423,7 @@ const RegisterPage = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Creating Account...
+                  Sending OTP...
                 </>
               ) : (
                 <>

@@ -1,339 +1,310 @@
 import React, { useState, useEffect } from "react";
 import api from "../../services/authService";
-import { FiUpload, FiFile, FiSettings, FiEdit2, FiX, FiFileText, FiDownload, FiPlus } from "react-icons/fi";
+import { FiHash, FiTrash2, FiUser, FiShield, FiAlertTriangle } from "react-icons/fi";
 import toast from 'react-hot-toast';
-import OrderFormBuilder from "./modals/OrderFormBuilder";
-import FieldPlacer from "./modals/FieldPlacer";
+import { useAuth } from '../../context/AuthContext';
+import AccountDeletionModal from '../shared/AccountDeletionModal';
 
 const Settings = ({ businessId }) => {
-  const [orderTemplate, setOrderTemplate] = useState(null);
-  const [invoiceTemplate, setInvoiceTemplate] = useState(null);
-  const [orderFileName, setOrderFileName] = useState("");
-  const [invoiceFileName, setInvoiceFileName] = useState("");
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showFormEditor, setShowFormEditor] = useState(false);
-  const [showStandaloneFormBuilder, setShowStandaloneFormBuilder] = useState(false);
+  const { role, logout } = useAuth();
+  const [numberConfigs, setNumberConfigs] = useState({ 
+    manufacturer_invoice: null 
+  });
+  const [numberConfigLoading, setNumberConfigLoading] = useState(false);
+  const [numberConfigForms, setNumberConfigForms] = useState({
+    manufacturer_invoice: { start_number: '', prefix: '' }
+  });
+  const [numberConfigSaving, setNumberConfigSaving] = useState({ 
+    manufacturer_invoice: false 
+  });
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
-  // Helper functions
-  const getOrderTemplate = () => templates.find(t => t.template_type === "order");
-  const getInvoiceTemplate = () => templates.find(t => t.template_type === "invoice");
-
-  const getTemplateUrl = (template) => {
-    return template?.preview_image_url || null;
-  };
-
-  const handleFileChange = (e, setter, setFileName) => {
-    if (e.target.files && e.target.files[0]) {
-      setter(e.target.files[0]);
-      setFileName(e.target.files[0].name);
-    }
-  };
-
-  const handleUpload = async (type) => {
-    const file = type === "order" ? orderTemplate : invoiceTemplate;
-    if (!file) {
-      toast.error("Please select a file first");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("template_type", type);
-
-    try {
-      await api.post("/management/template-upload/", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        }
-      });
-      toast.success("Template uploaded successfully!");
-      fetchTemplates();
-    } catch (error) {
-      console.error("Upload failed:", error);
-      toast.error("Upload failed. Please try again.");
-    }
-  };
-
-  const handleDownload = (template) => {
-    const url = getTemplateUrl(template);
-    if (!url) return;
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = template.file.split('/').pop();
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleDeleteTemplate = async (templateId) => {
-    try {
-      await api.delete(`/management/template-upload/${templateId}/`);
-      toast.success("Template deleted successfully");
-      fetchTemplates();
-    } catch (err) {
-      console.error("Error deleting template:", err);
-      toast.error("Failed to delete template");
-    }
-  };
-
-  const fetchTemplates = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get("/management/template-upload/");
-      console.log("Templates response:", res.data);
-      setTemplates(res.data);
-      
-      res.data.forEach(template => {
-        console.log(`Template ${template.template_type}:`, {
-          id: template.id,
-          file: template.file,
-          preview_image: template.preview_image,
-          uploaded_at: template.uploaded_at
-        });
-        if (template.template_type === "order") {
-          setOrderFileName(template.file.split("/").pop());
-        } else if (template.template_type === "invoice") {
-          setInvoiceFileName(template.file.split("/").pop());
-        }
-      });
-    } catch (err) {
-      console.error("Error loading templates", err);
-      toast.error("Failed to load templates");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Number config for manufacturers
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    if (role === 'manufacturer' && businessId) {
+      setNumberConfigLoading(true);
+      
+      // Fetch manufacturer invoice number config
+      api.get(`/management/number-configs/?business=${businessId}&config_type=manufacturer_invoice`)
+        .then((manufacturerInvoiceRes) => {
+          // Handle both paginated and non-paginated responses
+          let manufacturerInvoiceConfig = null;
+          
+          if (manufacturerInvoiceRes.data.results) {
+            // Paginated response
+            manufacturerInvoiceConfig = manufacturerInvoiceRes.data.results[0] || null;
+          } else if (Array.isArray(manufacturerInvoiceRes.data)) {
+            // Array response
+            manufacturerInvoiceConfig = manufacturerInvoiceRes.data[0] || null;
+          } else {
+            // Single object response
+            manufacturerInvoiceConfig = manufacturerInvoiceRes.data || null;
+          }
+          
+          setNumberConfigs({ 
+            manufacturer_invoice: manufacturerInvoiceConfig 
+          });
+          
+          setNumberConfigForms({
+            manufacturer_invoice: {
+              start_number: manufacturerInvoiceConfig?.start_number?.toString() || '',
+              prefix: manufacturerInvoiceConfig?.prefix || ''
+            }
+          });
+        })
+        .catch(err => {
+          console.error("Number config error:", err);
+          toast.error("Failed to load number configuration");
+        })
+        .finally(() => setNumberConfigLoading(false));
+    }
+  }, [role, businessId]);
+
+  const handleNumberConfigSave = async (e, configType) => {
+    e.preventDefault();
+    setNumberConfigSaving(prev => ({ ...prev, [configType]: true }));
+    
+    try {
+      const formData = numberConfigForms[configType];
+      const payload = {
+        business: businessId,
+        config_type: configType,
+        start_number: parseInt(formData.start_number),
+        current_number: parseInt(formData.start_number),
+        prefix: formData.prefix || ''
+      };
+
+      if (numberConfigs[configType]) {
+        // Update existing config
+        await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, payload);
+        toast.success("Number configuration updated successfully!");
+      } else {
+        // Create new config
+        await api.post("/management/number-configs/", payload);
+        toast.success("Number configuration created successfully!");
+      }
+
+      // Refresh the configs
+      const res = await api.get(`/management/number-configs/?business=${businessId}&config_type=${configType}`);
+      let newConfig = null;
+      
+      if (res.data.results) {
+        newConfig = res.data.results[0] || null;
+      } else if (Array.isArray(res.data)) {
+        newConfig = res.data[0] || null;
+      } else {
+        newConfig = res.data || null;
+      }
+      
+      setNumberConfigs(prev => ({ ...prev, [configType]: newConfig }));
+      
+    } catch (err) {
+      console.error("Save number config error:", err);
+      toast.error("Failed to save number configuration");
+    } finally {
+      setNumberConfigSaving(prev => ({ ...prev, [configType]: false }));
+    }
+  };
+
+  const handleResetNumbering = async (configType) => {
+    if (!numberConfigs[configType]) return;
+    
+    setNumberConfigSaving(prev => ({ ...prev, [configType]: true }));
+    
+    try {
+      await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, {
+        current_number: numberConfigs[configType].start_number
+      });
+      
+      // Update local state
+      setNumberConfigs(prev => ({
+        ...prev,
+        [configType]: {
+          ...prev[configType],
+          current_number: prev[configType].start_number
+        }
+      }));
+      
+      toast.success("Numbering reset successfully!");
+    } catch (err) {
+      console.error("Reset numbering error:", err);
+      toast.error("Failed to reset numbering");
+    } finally {
+      setNumberConfigSaving(prev => ({ ...prev, [configType]: false }));
+    }
+  };
+
+  const handleAccountDeletionSuccess = () => {
+    // Logout user after successful account deletion
+    logout();
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-4 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-4">
-          <h1 className="text-xl font-bold text-gray-800">Template Settings</h1>
-          <p className="text-sm text-gray-500">Manage your order and invoice templates</p>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">Business Settings</h1>
+          <p className="text-gray-600">Manage your business configuration</p>
         </div>
 
-        <div className="space-y-4">
-          {/* Digital Form Section */}
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FiFileText className="text-blue-500 text-sm" />
-                <h2 className="font-medium">Digital Order Form</h2>
-              </div>
-              <button
-                onClick={() => setShowStandaloneFormBuilder(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-              >
-                <FiPlus size={12} />
-                <span>Configure</span>
-              </button>
-            </div>
-          </div>
-
-          {/* PDF Templates Section */}
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center gap-2 mb-3">
-              <FiFile className="text-blue-500 text-sm" />
-              <h2 className="font-medium">PDF Templates</h2>
-            </div>
-            
-            <div className="space-y-3">
-              {/* Order Template */}
-              <div className="border rounded p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium">Order Template</h3>
-                  {getOrderTemplate() && (
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setShowFormEditor(true)}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded hover:bg-blue-100"
-                      >
-                        <FiEdit2 size={12} />
-                        <span>Edit Fields</span>
-                      </button>
-                    </div>
-                  )}
+        {/* Compact Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Number Configuration */}
+          {role === 'manufacturer' && (
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-full bg-blue-50 text-blue-600">
+                  <FiHash className="w-4 h-4" />
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <label className="flex-1">
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={(e) => handleFileChange(e, setOrderTemplate, setOrderFileName)}
-                        className="hidden"
-                        id="order-template"
-                      />
-                      <div className="flex items-center justify-between px-2 py-1.5 border rounded text-xs cursor-pointer hover:bg-gray-50">
-                        <span className="truncate">
-                          {orderFileName || "Select file"}
-                        </span>
-                        <FiUpload className="text-gray-400 text-xs" />
+                <h2 className="font-medium">Number Configuration</h2>
+              </div>
+              
+              {numberConfigLoading ? (
+                <div className="py-2 text-center text-sm text-gray-500">Loading configuration...</div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Manufacturer Invoice Numbering */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Manufacturer Invoice Numbering</h3>
+                    <form onSubmit={(e) => handleNumberConfigSave(e, 'manufacturer_invoice')} className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Start Number</label>
+                          <input
+                            type="number"
+                            name="start_number"
+                            value={numberConfigForms.manufacturer_invoice.start_number}
+                            onChange={(e) => setNumberConfigForms(prev => ({
+                              ...prev,
+                              manufacturer_invoice: { ...prev.manufacturer_invoice, start_number: e.target.value }
+                            }))}
+                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.manufacturer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                            min={1}
+                            required
+                            disabled={numberConfigs.manufacturer_invoice}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Prefix</label>
+                          <input
+                            type="text"
+                            name="prefix"
+                            value={numberConfigForms.manufacturer_invoice.prefix}
+                            onChange={(e) => setNumberConfigForms(prev => ({
+                              ...prev,
+                              manufacturer_invoice: { ...prev.manufacturer_invoice, prefix: e.target.value }
+                            }))}
+                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.manufacturer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                            maxLength={10}
+                            placeholder="MFG-INV-"
+                            disabled={numberConfigs.manufacturer_invoice}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                  <button
-                    onClick={() => handleUpload("order")}
-                    disabled={!orderTemplate}
-                    className="px-2 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    Upload
-                  </button>
-                </div>
-              </div>
-
-              {/* Invoice Template */}
-              <div className="border rounded p-3">
-                <h3 className="text-sm font-medium mb-2">Invoice Template</h3>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <label className="flex-1">
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={(e) => handleFileChange(e, setInvoiceTemplate, setInvoiceFileName)}
-                        className="hidden"
-                        id="invoice-template"
-                      />
-                      <div className="flex items-center justify-between px-2 py-1.5 border rounded text-xs cursor-pointer hover:bg-gray-50">
-                        <span className="truncate">
-                          {invoiceFileName || "Select file"}
-                        </span>
-                        <FiUpload className="text-gray-400 text-xs" />
+                      
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-2">
+                          {!numberConfigs.manufacturer_invoice && (
+                            <button
+                              type="submit"
+                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                              disabled={numberConfigSaving.manufacturer_invoice}
+                            >
+                              {numberConfigSaving.manufacturer_invoice ? 'Saving...' : 'Save Format'}
+                            </button>
+                          )}
+                          {numberConfigs.manufacturer_invoice && (
+                            <button
+                              type="button"
+                              onClick={() => handleResetNumbering('manufacturer_invoice')}
+                              className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                              disabled={numberConfigSaving.manufacturer_invoice}
+                            >
+                              Reset Numbering
+                            </button>
+                          )}
+                        </div>
+                        {numberConfigs.manufacturer_invoice && (
+                          <div className="text-sm text-gray-600">
+                            Current: <span className="font-medium">{numberConfigs.manufacturer_invoice.prefix ? `${numberConfigs.manufacturer_invoice.prefix}-${numberConfigs.manufacturer_invoice.current_number}` : numberConfigs.manufacturer_invoice.current_number}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </label>
-                  <button
-                    onClick={() => handleUpload("invoice")}
-                    disabled={!invoiceTemplate}
-                    className="px-2 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    Upload
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Current Templates */}
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center gap-2 mb-3">
-              <FiSettings className="text-blue-500 text-sm" />
-              <h2 className="font-medium">Current Templates</h2>
-            </div>
-            
-            {loading ? (
-              <div className="flex justify-center py-4">
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : templates.length === 0 ? (
-              <p className="text-xs text-gray-500 text-center py-4">No templates uploaded</p>
-            ) : (
-              <div className="space-y-2">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs"
-                  >
-                    <div className="truncate">
-                      <span className="font-medium">
-                        {template.template_type === "order" ? "Order" : "Invoice"}:
-                      </span>
-                      <span className="text-gray-500 ml-1">
-                        {template.file.split('/').pop()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400 text-xs">
-                        {new Date(template.uploaded_at).toLocaleDateString()}
-                      </span>
-                      <button 
-                        onClick={() => handleDeleteTemplate(template.id)}
-                        className="text-red-500 hover:text-red-700"
-                        title="Delete Template"
-                      >
-                        <FiX size={14} />
-                      </button>
-                    </div>
+                    </form>
                   </div>
-                ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Account Management */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-full bg-red-50 text-red-600">
+                <FiUser className="w-4 h-4" />
               </div>
-            )}
+              <h2 className="font-medium">Account Management</h2>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Account Security</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  Manage your account settings and security preferences
+                </p>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FiShield className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700">Account Status</span>
+                    </div>
+                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                      Active
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FiUser className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700">User Type</span>
+                    </div>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full capitalize">
+                      {role}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-sm font-medium mb-2 text-red-700">Danger Zone</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  Irreversible and destructive actions
+                </p>
+                
+                <button
+                  onClick={() => setShowDeleteAccountModal(true)}
+                  className="w-full px-4 py-3 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors flex items-center justify-center gap-2"
+                >
+                  <FiAlertTriangle className="w-4 h-4" />
+                  Delete Account
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Modals */}
-      {showStandaloneFormBuilder && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-3 border-b">
-              <h3 className="font-semibold">Order Form Builder</h3>
-              <button
-                onClick={() => setShowStandaloneFormBuilder(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX size={18} />
-              </button>
-            </div>
-            <div className="p-3 overflow-auto">
-              {businessId && (
-                <OrderFormBuilder
-                  businessId={businessId}
-                  onCreated={() => {
-                    toast.success("Form saved");
-                    setShowStandaloneFormBuilder(false);
-                  }}
-                  onClose={() => setShowStandaloneFormBuilder(false)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showFormEditor && getOrderTemplate() && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-3 border-b">
-              <h3 className="font-semibold">PDF Field Placement</h3>
-              <button
-                onClick={() => setShowFormEditor(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FiX size={18} />
-              </button>
-            </div>
-            <div className="p-3 overflow-auto">
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-2">📋 Drag & Drop Field Mapping</h4>
-                <p className="text-sm text-blue-700">
-                  <strong>How it works:</strong> Drag digital form fields from the left panel and drop them onto the PDF template. 
-                  The coordinates will be automatically captured and saved. When customers fill out orders, 
-                  the data will be placed at these exact positions on the PDF.
-                </p>
-              </div>
-              <FieldPlacer
-                templateId={getOrderTemplate().id}
-                templateImageUrl={getTemplateUrl(getOrderTemplate())}
-                previewDpi={getOrderTemplate().preview_dpi}
-                pdfWidthPt={getOrderTemplate().pdf_width_pt}
-                pdfHeightPt={getOrderTemplate().pdf_height_pt}
-                businessId={businessId}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Account Deletion Modal */}
+      <AccountDeletionModal
+        isOpen={showDeleteAccountModal}
+        onClose={() => setShowDeleteAccountModal(false)}
+        onSuccess={handleAccountDeletionSuccess}
+        userType={role}
+      />
     </div>
   );
 };
 
-export default Settings;
+export default Settings; 
