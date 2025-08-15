@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Package, Calendar, User, FileText, DollarSign, Hash, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Package, Calendar, User, FileText, DollarSign, Hash, ChevronDown, AlertCircle, Search, Check, Plus } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import api from '../../../../services/authService';
+import toast from 'react-hot-toast';
 
 const OrderFormStep = ({ 
   selectedProduct, 
@@ -14,6 +15,63 @@ const OrderFormStep = ({
   isEdit = false
 }) => {
   const [orderId, setOrderId] = useState('');
+  const [endCustomers, setEndCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [selectedCustomerIndex, setSelectedCustomerIndex] = useState(-1);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowCustomerDropdown(false);
+        setSelectedCustomerIndex(-1);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowCustomerDropdown(false);
+        setSelectedCustomerIndex(-1);
+      }
+    };
+
+    if (showCustomerDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showCustomerDropdown]);
+
+  // Fetch end customers on component mount
+  useEffect(() => {
+    fetchEndCustomers();
+  }, []);
+
+  const fetchEndCustomers = async () => {
+    setLoadingCustomers(true);
+    try {
+      const businessId = selectedProduct?.business;
+      if (!businessId) {
+        console.error('No business ID available');
+        return;
+      }
+
+      const response = await api.get(`/management/end-customers/?business=${businessId}`);
+      setEndCustomers(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch end customers:', error);
+      // Don't show error toast as this is optional functionality
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
 
   useEffect(() => {
     // Only fetch Order ID for new orders, not for editing
@@ -82,8 +140,135 @@ const OrderFormStep = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    handleCustomerSubmit();
     onSubmit(orderData);
   };
+
+  const handleCustomerChange = (value) => {
+    setOrderData(prev => ({
+      ...prev,
+      customer: value
+    }));
+    setCustomerSearchQuery(value);
+    setShowCustomerDropdown(true);
+  };
+
+  const handleCustomerSelect = (customerName) => {
+    setOrderData(prev => ({
+      ...prev,
+      customer: customerName
+    }));
+    setCustomerSearchQuery(customerName);
+    setShowCustomerDropdown(false);
+    setSelectedCustomerIndex(-1);
+  };
+
+  const handleCustomerInputBlur = () => {
+    // Don't close immediately - let the click outside handler manage this
+  };
+
+  const handleCustomerInputFocus = () => {
+    if (endCustomers.length > 0) {
+      setShowCustomerDropdown(true);
+      setSelectedCustomerIndex(-1);
+    }
+  };
+
+  const handleCustomerInputClick = () => {
+    if (endCustomers.length > 0) {
+      setShowCustomerDropdown(true);
+      setSelectedCustomerIndex(-1);
+    }
+  };
+
+  const handleCustomerKeyDown = (e) => {
+    if (!showCustomerDropdown) return;
+
+    const totalOptions = filteredCustomers.length + (customerSearchQuery.length > 0 && !filteredCustomers.find(c => c.name.toLowerCase() === customerSearchQuery.toLowerCase()) ? 1 : 0);
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedCustomerIndex(prev => 
+          prev < totalOptions - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedCustomerIndex(prev => 
+          prev > 0 ? prev - 1 : totalOptions - 1
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedCustomerIndex >= 0 && selectedCustomerIndex < filteredCustomers.length) {
+          handleCustomerSelect(filteredCustomers[selectedCustomerIndex].name);
+        } else if (selectedCustomerIndex === filteredCustomers.length && customerSearchQuery.length > 0) {
+          handleCustomerSelect(customerSearchQuery);
+        }
+        break;
+      case 'Escape':
+        setShowCustomerDropdown(false);
+        setSelectedCustomerIndex(-1);
+        break;
+    }
+  };
+
+  const handleCustomerSubmit = () => {
+    const value = orderData.customer.trim();
+    if (!value) return;
+
+    // Check if the entered value exists in end customers
+    const existingCustomer = endCustomers.find(customer => 
+      customer.name.toLowerCase() === value.toLowerCase()
+    );
+
+    if (!existingCustomer && value) {
+      // Automatically create new end customer without confirmation dialog
+      handleCustomerDialogConfirm(value);
+    } else {
+      // Direct update if customer exists
+      handleInputChange('customer', value);
+    }
+  };
+
+  const handleCustomerDialogConfirm = async (customerName) => {
+    try {
+      const businessId = selectedProduct?.business;
+      if (!businessId) {
+        throw new Error('No business ID available');
+      }
+
+      if (!customerName) {
+        throw new Error('No customer name provided');
+      }
+
+      // Create new end customer
+      const response = await api.post(`/management/end-customers/?business=${businessId}`, {
+        name: customerName,
+        business: businessId,
+        contact_person: '',
+        email: '',
+        phone: '',
+        address: ''
+      });
+
+      // Add to local state
+      setEndCustomers(prev => [...prev, response.data]);
+      
+      // Set the customer name in order data
+      handleInputChange('customer', customerName);
+      
+      toast.success('New customer added automatically!');
+    } catch (error) {
+      console.error('Failed to save new customer:', error);
+      toast.error('Failed to save new customer. Please try again.');
+      // Still set the customer name as string if save fails
+      handleInputChange('customer', customerName);
+    }
+  };
+
+
 
   const formatFieldValue = (fieldValue, fieldType, fieldConfig) => {
     if (!fieldValue) return 'N/A';
@@ -117,6 +302,11 @@ const OrderFormStep = ({
         return <FileText className="w-4 h-4 text-gray-500" />;
     }
   };
+
+  // Filter customers based on search query
+  const filteredCustomers = endCustomers.filter(customer =>
+    customer.name.toLowerCase().includes(customerSearchQuery.toLowerCase())
+  );
 
   // Add null checking after all hooks to prevent errors when selectedProduct is null
   if (!selectedProduct) {
@@ -292,14 +482,153 @@ const OrderFormStep = ({
               <label className="block text-[#495057] text-sm font-medium mb-1.5">
                 Customer *
               </label>
-              <input
-                type="text"
-                value={orderData.customer}
-                onChange={(e) => handleInputChange('customer', e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#F8F9FA] border border-[#DEE2E6] rounded-lg focus:border-[#343A40] focus:ring-1 focus:ring-[#343A40]/20 transition-colors"
-                placeholder="Enter the organization/company name"
-                required
-              />
+              {loadingCustomers ? (
+                <div className="w-full px-4 py-2.5 bg-[#F8F9FA] border border-[#DEE2E6] rounded-lg flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#343A40] mr-2"></div>
+                  <span className="text-[#6C757D] text-sm">Loading customers...</span>
+                </div>
+              ) : endCustomers.length > 0 ? (
+                <div className="relative" ref={dropdownRef}>
+                                     <input
+                     type="text"
+                     value={customerSearchQuery}
+                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                     onBlur={handleCustomerInputBlur}
+                     onFocus={handleCustomerInputFocus}
+                     onClick={handleCustomerInputClick}
+                     onKeyDown={handleCustomerKeyDown}
+                     className="w-full px-4 py-2.5 bg-[#F8F9FA] border border-[#DEE2E6] rounded-lg focus:border-[#343A40] focus:ring-1 focus:ring-[#343A40]/20 transition-colors"
+                     placeholder="Select from dropdown or type to automatically add new"
+                     required
+                   />
+                                     <div 
+                     className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer p-1 hover:bg-[#E9ECEF] rounded transition-colors"
+                     onClick={handleCustomerInputClick}
+                   >
+                     <ChevronDown className={`w-4 h-4 text-[#6C757D] transition-transform ${showCustomerDropdown ? 'rotate-180' : ''}`} />
+                   </div>
+                                     {showCustomerDropdown && (
+                     <div className="absolute z-10 w-full bg-white border border-[#DEE2E6] rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
+                       <div className="p-2 border-b border-[#E9ECEF]">
+                         <div className="relative">
+                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6C757D]" />
+                           <input
+                             type="text"
+                             placeholder="Search customers..."
+                             value={customerSearchQuery}
+                             onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                             className="w-full pl-10 pr-4 py-2 text-sm bg-[#F8F9FA] border border-[#DEE2E6] rounded-md focus:border-[#343A40] focus:ring-1 focus:ring-[#343A40]/20 transition-colors"
+                             autoFocus
+                           />
+                         </div>
+                       </div>
+                       <div className="max-h-48 overflow-y-auto">
+                         {filteredCustomers.length === 0 ? (
+                           <div className="p-4 text-center">
+                             {customerSearchQuery.length > 0 ? (
+                               <div className="text-sm text-[#6C757D]">
+                                 <div className="mb-2">No customers found for "{customerSearchQuery}"</div>
+                                                                      <div className="text-xs text-[#ADB5BD]">
+                                   Press Enter to automatically add new customer
+                                 </div>
+                               </div>
+                             ) : (
+                               <div className="text-sm text-[#6C757D]">
+                                 <User className="w-8 h-8 mx-auto mb-2 text-[#ADB5BD]" />
+                                 <div>No customers available</div>
+                                 <div className="text-xs text-[#ADB5BD] mt-1">
+                                   Type to automatically add a new customer
+                                 </div>
+                               </div>
+                             )}
+                           </div>
+                         ) : (
+                           <>
+                             {filteredCustomers.map((customer, index) => (
+                               <div
+                                 key={customer.id}
+                                 className={`flex items-center justify-between p-3 cursor-pointer transition-colors border-b border-[#F8F9FA] last:border-b-0 ${
+                                   index === selectedCustomerIndex 
+                                     ? 'bg-[#343A40] text-white' 
+                                     : 'hover:bg-[#E9ECEF]'
+                                 }`}
+                                 onClick={() => handleCustomerSelect(customer.name)}
+                               >
+                                 <div className="flex items-center gap-3">
+                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                     index === selectedCustomerIndex ? 'bg-white' : 'bg-[#343A40]'
+                                   }`}>
+                                     <User className={`w-4 h-4 ${
+                                       index === selectedCustomerIndex ? 'text-[#343A40]' : 'text-white'
+                                     }`} />
+                                   </div>
+                                   <div>
+                                     <div className={`font-medium ${
+                                       index === selectedCustomerIndex ? 'text-white' : 'text-[#343A40]'
+                                     }`}>{customer.name}</div>
+                                     {customer.contact_person && (
+                                       <div className={`text-xs ${
+                                         index === selectedCustomerIndex ? 'text-gray-200' : 'text-[#6C757D]'
+                                       }`}>{customer.contact_person}</div>
+                                     )}
+                                   </div>
+                                 </div>
+                                 {orderData.customer === customer.name && (
+                                   <Check className={`w-4 h-4 ${
+                                     index === selectedCustomerIndex ? 'text-white' : 'text-[#343A40]'
+                                   }`} />
+                                 )}
+                               </div>
+                             ))}
+                             {customerSearchQuery.length > 0 && !filteredCustomers.find(c => c.name.toLowerCase() === customerSearchQuery.toLowerCase()) && (
+                               <div className="border-t border-[#E9ECEF]">
+                                 <div
+                                   className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
+                                     selectedCustomerIndex === filteredCustomers.length 
+                                       ? 'bg-[#343A40] text-white' 
+                                       : 'hover:bg-[#E9ECEF]'
+                                   }`}
+                                   onClick={() => handleCustomerSelect(customerSearchQuery)}
+                                 >
+                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                     selectedCustomerIndex === filteredCustomers.length ? 'bg-white' : 'bg-blue-100'
+                                   }`}>
+                                     <Plus className={`w-4 h-4 ${
+                                       selectedCustomerIndex === filteredCustomers.length ? 'text-[#343A40]' : 'text-blue-600'
+                                     }`} />
+                                   </div>
+                                   <div>
+                                     <div className={`font-medium ${
+                                       selectedCustomerIndex === filteredCustomers.length ? 'text-white' : 'text-[#343A40]'
+                                     }`}>Create "{customerSearchQuery}"</div>
+                                     <div className={`text-xs ${
+                                       selectedCustomerIndex === filteredCustomers.length ? 'text-gray-200' : 'text-[#6C757D]'
+                                     }`}>Automatically add as new customer</div>
+                                   </div>
+                                 </div>
+                               </div>
+                             )}
+                           </>
+                         )}
+                       </div>
+                     </div>
+                   )}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={orderData.customer}
+                  onChange={(e) => handleCustomerChange(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-[#F8F9FA] border border-[#DEE2E6] rounded-lg focus:border-[#343A40] focus:ring-1 focus:ring-[#343A40]/20 transition-colors"
+                  placeholder="Enter the organization/company name"
+                  required
+                />
+              )}
+              {endCustomers.length > 0 && (
+                <p className="text-xs text-[#6C757D] mt-1">
+                  Select from existing customers or type a new name to automatically add to your customer list
+                </p>
+              )}
             </div>
 
             {/* Special Instructions */}
@@ -336,6 +665,8 @@ const OrderFormStep = ({
           </form>
         </div>
       </details>
+
+
     </div>
     </div>
   );

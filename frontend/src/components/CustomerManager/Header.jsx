@@ -32,6 +32,7 @@ const Header = ({
       case 'orders': return userType === 'manufacturer' ? 'Orders' : 'My Orders';
       case 'templates': return 'Templates';
       case 'payments': return 'Payments';
+      case 'sales': return 'Sales Management';
       case 'customers': return userType === 'manufacturer' ? 'Customers' : 'Profile';
       case 'analytics': return 'Analytics';
       case 'settings': return 'Settings';
@@ -57,6 +58,7 @@ const Header = ({
           : 'View your order history';
       case 'templates': return 'Manage your product templates';
       case 'payments': return 'View and manage transactions';
+      case 'sales': return 'Manage your end customers, sales invoices, and track revenue';
       case 'customers': 
         return userType === 'manufacturer' 
           ? 'View and manage your customers' 
@@ -185,6 +187,8 @@ const Header = ({
             />
           </div>
         )}
+        
+
         
         {/* Add Product Button for Products Tab */}
         {activeTab === 'products' && userType === 'customer' && (

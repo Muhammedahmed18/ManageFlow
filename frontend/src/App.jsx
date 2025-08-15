@@ -9,9 +9,12 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ManufacturerDashboard from './pages/ManufacturerDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
+
 import ProtectedRoute from './components/ProtectedRoute';
 import BusinessManager from "./pages/BusinessManager";
 import CustomerManager from './pages/CustomerManager';
+import BusinessVisibilityManager from './components/CustomerManager/BusinessVisibilityManager';
+import NotificationSystem from './components/shared/NotificationSystem';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -20,6 +23,7 @@ function App() {
     <Router>
       <AuthProvider>
         <div className="app">
+          <NotificationSystem />
           <ToastContainer position="top-center" autoClose={5000} />
 
           <Routes>
@@ -41,6 +45,7 @@ function App() {
             <Route element={<ProtectedRoute allowedRoles={['customer']} />}> 
               <Route path="/dashboard/customer" element={<CustomerDashboard />} />
               <Route path="/manage/customer/:id" element={<CustomerManager />} />
+              <Route path="/business-visibility" element={<BusinessVisibilityManager />} />
             </Route>
 
             {/* Fallback */}

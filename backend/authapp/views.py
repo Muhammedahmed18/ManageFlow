@@ -17,8 +17,24 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import json
 import time
+import logging
+
+# Import new security utilities
+from .permissions import IsManufacturer, IsCustomer, IsBusinessOwner, IsActiveUser
+from .validators import EmailValidator, PasswordValidator, PhoneValidator, BusinessNameValidator
+from .utils import TokenManager, UserActivityTracker, SecurityUtils, RateLimitUtils
+from django.contrib.auth import get_user_model
+from .serializers import UserSerializer, UserSettingsSerializer
+from .models import UserSettings
+
+User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 def cleanup_expired_registrations():
     """
@@ -50,6 +66,84 @@ class CustomTokenRefreshView(TokenRefreshView):
 def protected_view(request):
     user = request.user
     return Response({"message": f"Welcome {user.username}, you are approved and authenticated!"})
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    """Get or update current user profile data"""
+    user = request.user
+    
+    if request.method == 'GET':
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'role': user.role,
+            'is_approved': user.is_approved,
+            'location': user.location,
+            'company_name': user.company_name,
+            'description': user.description
+        })
+    
+    elif request.method == 'PUT':
+        data = request.data
+        
+        # Update allowed fields
+        if 'first_name' in data:
+            user.first_name = data['first_name'].strip()
+        if 'last_name' in data:
+            user.last_name = data['last_name'].strip()
+        if 'email' in data:
+            user.email = data['email'].strip()
+        if 'company_name' in data:
+            user.company_name = data['company_name'].strip()
+        if 'location' in data:
+            user.location = data['location'].strip()
+        if 'description' in data:
+            user.description = data['description'].strip()
+        
+        try:
+            user.save()
+            return Response({
+                'message': 'Profile updated successfully',
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'role': user.role,
+                'is_approved': user.is_approved,
+                'location': user.location,
+                'company_name': user.company_name,
+                'description': user.description
+            })
+        except Exception as e:
+            return Response({
+                'error': 'Failed to update profile',
+                'details': str(e)
+            }, status=400)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_user_location(request):
+    """Update user location"""
+    user = request.user
+    location = request.data.get('location', '').strip()
+    
+    if not location:
+        return Response({
+            'error': 'Location is required'
+        }, status=400)
+    
+    user.location = location
+    user.save()
+    
+    return Response({
+        'message': 'Location updated successfully',
+        'location': user.location
+    })
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -86,58 +180,121 @@ class SendRegistrationOTPView(APIView):
     Stores registration data temporarily in cache.
     """
     def post(self, request):
-        data = request.data.copy()
-        
-        # Validate required fields
-        required_fields = ['username', 'email', 'password', 'role', 'first_name', 'last_name']
-        for field in required_fields:
-            if not data.get(field):
-                return Response({"error": f"{field.replace('_', ' ').title()} is required."}, status=400)
-        
-        # Check if email already exists
-        if User.objects.filter(email=data['email']).exists():
-            return Response({"error": "A user with this email already exists."}, status=400)
-        
-        # Check if username already exists
-        if User.objects.filter(username=data['username']).exists():
-            return Response({"error": "A user with this username already exists."}, status=400)
-        
-        # Generate OTP
-        otp = str(random.randint(100000, 999999))
-        
-        # Store registration data in cache for 15 minutes
-        cache_key = f"registration_{data['email']}"
-        registration_data = {
-            'username': data['username'],
-            'email': data['email'],
-            'password': data['password'],
-            'role': data['role'],
-            'first_name': data['first_name'],
-            'last_name': data['last_name'],
-            'otp': otp,
-            'created_at': time.time(),
-            'expires_at': time.time() + 900  # 15 minutes
-        }
-        
-        cache.set(cache_key, registration_data, 900)  # 15 minutes timeout
-        
-        # Send OTP email
         try:
-            send_mail(
-                subject="ManageFlow Registration OTP",
-                message=f"Your OTP for email verification is: {otp}\n\nThis OTP will expire in 15 minutes.",
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[data['email']],
-                fail_silently=False,
-            )
-            return Response({
-                "message": "OTP sent to email successfully.",
-                "email": data['email']
-            }, status=200)
+            # Rate limiting check
+            client_ip = self.get_client_ip(request)
+            rate_limit_key = f"registration_otp:{client_ip}"
+            
+            if not RateLimitUtils.check_rate_limit(rate_limit_key, 5, 300):  # 5 attempts per 5 minutes
+                remaining_time = cache.ttl(rate_limit_key)
+                return Response({
+                    "error": "Too many registration attempts. Please try again later.",
+                    "retry_after": remaining_time
+                }, status=429)
+            
+            data = request.data.copy()
+            
+            # Enhanced validation
+            try:
+                # Validate email
+                email = EmailValidator.validate_email(data.get('email', ''))
+                
+                # Validate password strength
+                password_errors = SecurityUtils.validate_password_strength(data.get('password', ''))
+                if password_errors:
+                    return Response({
+                        "error": "Password validation failed",
+                        "details": password_errors
+                    }, status=400)
+                
+                # Validate required fields
+                required_fields = ['username', 'email', 'password', 'role', 'first_name', 'last_name']
+                for field in required_fields:
+                    if not data.get(field):
+                        return Response({
+                            "error": f"{field.replace('_', ' ').title()} is required."
+                        }, status=400)
+                
+                # Sanitize inputs
+                data['username'] = SecurityUtils.sanitize_input(data['username'])
+                data['first_name'] = SecurityUtils.sanitize_input(data['first_name'])
+                data['last_name'] = SecurityUtils.sanitize_input(data['last_name'])
+                
+            except Exception as validation_error:
+                return Response({
+                    "error": str(validation_error)
+                }, status=400)
+            
+            # Check if email already exists
+            if User.objects.filter(email=email).exists():
+                return Response({
+                    "error": "A user with this email already exists."
+                }, status=400)
+            
+            # Check if username already exists
+            if User.objects.filter(username=data['username']).exists():
+                return Response({
+                    "error": "A user with this username already exists."
+                }, status=400)
+            
+            # Generate OTP
+            otp = str(random.randint(100000, 999999))
+            
+            # Store registration data in cache for 15 minutes
+            cache_key = f"registration_{email}"
+            registration_data = {
+                'username': data['username'],
+                'email': email,
+                'password': data['password'],
+                'role': data['role'],
+                'first_name': data['first_name'],
+                'last_name': data['last_name'],
+                'otp': otp,
+                'created_at': time.time(),
+                'expires_at': time.time() + 900,  # 15 minutes
+                'ip_address': client_ip
+            }
+            
+            cache.set(cache_key, registration_data, 900)  # 15 minutes timeout
+            
+            # Send OTP email
+            try:
+                send_mail(
+                    subject="ManageFlow Registration OTP",
+                    message=f"Your OTP for email verification is: {otp}\n\nThis OTP will expire in 15 minutes.",
+                    from_email=settings.EMAIL_HOST_USER,
+                    recipient_list=[email],
+                    fail_silently=False,
+                )
+                
+                logger.info(f"Registration OTP sent to {email} from IP {client_ip}")
+                
+                return Response({
+                    "message": "OTP sent to email successfully.",
+                    "email": email
+                }, status=200)
+                
+            except Exception as e:
+                # Remove cached data if email fails
+                cache.delete(cache_key)
+                logger.error(f"Failed to send registration OTP to {email}: {str(e)}")
+                return Response({
+                    "error": "Failed to send OTP email. Please try again."
+                }, status=500)
+                
         except Exception as e:
-            # Remove cached data if email fails
-            cache.delete(cache_key)
-            return Response({"error": "Failed to send OTP email. Please try again."}, status=500)
+            logger.error(f"Unexpected error in SendRegistrationOTPView: {str(e)}")
+            return Response({
+                "error": "An unexpected error occurred. Please try again."
+            }, status=500)
+    
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
 
 
 class RegisterView(APIView):
@@ -387,11 +544,25 @@ class LogoutView(APIView):
     def post(self, request):
         try:
             refresh_token = request.data.get("refresh")
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response({"message": "Logout successful."}, status=status.HTTP_205_RESET_CONTENT)
-        except Exception:
-            return Response({"error": "Invalid or already blacklisted token."}, status=400)
+            
+            # Record logout activity
+            UserActivityTracker.record_logout(request.user)
+            
+            # Blacklist the token
+            if refresh_token:
+                TokenManager.blacklist_token(refresh_token)
+            
+            logger.info(f"User {request.user.email} logged out successfully")
+            
+            return Response({
+                "message": "Logout successful."
+            }, status=status.HTTP_205_RESET_CONTENT)
+            
+        except Exception as e:
+            logger.error(f"Logout error: {str(e)}")
+            return Response({
+                "error": "Logout failed. Please try again."
+            }, status=400)
 
 class DeleteAccountView(APIView):
     permission_classes = [IsAuthenticated]
@@ -410,6 +581,77 @@ class DeleteAccountView(APIView):
 
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            # Rate limiting check
+            client_ip = self.get_client_ip(request)
+            rate_limit_key = f"login_attempts:{client_ip}"
+            
+            if not RateLimitUtils.check_rate_limit(rate_limit_key, 10, 300):  # 10 attempts per 5 minutes
+                remaining_time = cache.ttl(rate_limit_key)
+                return Response({
+                    "error": "Too many login attempts. Please try again later.",
+                    "retry_after": remaining_time
+                }, status=429)
+            
+            # Call parent method to handle authentication
+            response = super().post(request, *args, **kwargs)
+            
+            # If login successful, record activity and enhance response
+            if response.status_code == 200:
+                try:
+                    # Get user from request (set by authentication)
+                    user = request.user
+                    
+                    # Record login activity
+                    UserActivityTracker.record_login(
+                        user=user,
+                        ip_address=client_ip,
+                        user_agent=request.META.get('HTTP_USER_AGENT', '')
+                    )
+                    
+                    # Generate enhanced tokens
+                    tokens = TokenManager.generate_tokens(user)
+                    
+                    # Update response with enhanced data
+                    response.data.update({
+                        'user': {
+                            'id': user.id,
+                            'username': user.username,
+                            'email': user.email,
+                            'role': user.role,
+                            'first_name': user.first_name,
+                            'last_name': user.last_name,
+                            'is_approved': user.is_approved,
+                            'rejected': user.rejected,
+                            'email_verified': user.email_verified
+                        },
+                        'access_token_expires': tokens['access_token_expires'],
+                        'refresh_token_expires': tokens['refresh_token_expires']
+                    })
+                    
+                    logger.info(f"User {user.email} logged in successfully from IP {client_ip}")
+                    
+                except Exception as e:
+                    logger.error(f"Error recording login activity: {str(e)}")
+                    # Don't fail the login if activity tracking fails
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Login error: {str(e)}")
+            return Response({
+                "error": "Login failed. Please check your credentials and try again."
+            }, status=400)
+    
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -459,3 +701,122 @@ def delete_account(request):
         
     except Exception as e:
         return Response({'error': 'Account deletion failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class UserSettingsView(APIView):
+    """Handle user privacy and business settings"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get user settings"""
+        try:
+            # Get or create settings for the user
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            serializer = UserSettingsSerializer(settings)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"detail": "Error fetching user settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def put(self, request):
+        """Update user settings"""
+        try:
+            # Get or create settings for the user
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            serializer = UserSettingsSerializer(settings, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"detail": "Error updating user settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class PrivacySettingsView(APIView):
+    """Handle privacy settings specifically"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get privacy settings"""
+        try:
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            privacy_data = {
+                'profile_visibility': settings.profile_visibility,
+                'business_visibility': settings.business_visibility,
+                'contact_info_visibility': settings.contact_info_visibility,
+                'allow_contact_requests': settings.allow_contact_requests
+            }
+            return Response(privacy_data)
+        except Exception as e:
+            return Response(
+                {"detail": "Error fetching privacy settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def put(self, request):
+        """Update privacy settings"""
+        try:
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            
+            # Update only privacy-related fields
+            privacy_fields = ['profile_visibility', 'business_visibility', 'contact_info_visibility', 'allow_contact_requests']
+            update_data = {k: v for k, v in request.data.items() if k in privacy_fields}
+            
+            serializer = UserSettingsSerializer(settings, data=update_data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"detail": "Error updating privacy settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class BusinessSettingsView(APIView):
+    """Handle business settings specifically"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get business settings"""
+        try:
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            business_data = {
+                'auto_approve_requests': settings.auto_approve_requests,
+                'require_approval': settings.require_approval,
+                'max_businesses': settings.max_businesses,
+                'default_visibility': settings.default_visibility
+            }
+            return Response(business_data)
+        except Exception as e:
+            return Response(
+                {"detail": "Error fetching business settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def put(self, request):
+        """Update business settings"""
+        try:
+            settings, created = UserSettings.objects.get_or_create(user=request.user)
+            
+            # Update only business-related fields
+            business_fields = ['auto_approve_requests', 'require_approval', 'max_businesses', 'default_visibility']
+            update_data = {k: v for k, v in request.data.items() if k in business_fields}
+            
+            serializer = UserSettingsSerializer(settings, data=update_data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"detail": "Error updating business settings"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

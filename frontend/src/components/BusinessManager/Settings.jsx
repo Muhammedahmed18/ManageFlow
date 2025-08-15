@@ -6,57 +6,71 @@ import { useAuth } from '../../context/AuthContext';
 import AccountDeletionModal from '../shared/AccountDeletionModal';
 
 const Settings = ({ businessId }) => {
-  const { role, logout } = useAuth();
+  const { getRole, logout } = useAuth();
+  const role = getRole();
   const [numberConfigs, setNumberConfigs] = useState({ 
-    manufacturer_invoice: null 
+    manufacturer_invoice: null,
+    customer_invoice: null
   });
   const [numberConfigLoading, setNumberConfigLoading] = useState(false);
   const [numberConfigForms, setNumberConfigForms] = useState({
-    manufacturer_invoice: { start_number: '', prefix: '' }
+    manufacturer_invoice: { start_number: '', prefix: '' },
+    customer_invoice: { start_number: '', prefix: '' }
   });
   const [numberConfigSaving, setNumberConfigSaving] = useState({ 
-    manufacturer_invoice: false 
+    manufacturer_invoice: false,
+    customer_invoice: false
   });
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
-  // Number config for manufacturers
+  // Number config for both manufacturers and customers
   useEffect(() => {
-    if (role === 'manufacturer' && businessId) {
+    if (businessId) {
       setNumberConfigLoading(true);
       
-      // Fetch manufacturer invoice number config
-      api.get(`/management/number-configs/?business=${businessId}&config_type=manufacturer_invoice`)
-        .then((manufacturerInvoiceRes) => {
-          // Handle both paginated and non-paginated responses
-          let manufacturerInvoiceConfig = null;
+      const fetchConfigs = async () => {
+        try {
+          const configs = {};
+          const forms = {};
           
-          if (manufacturerInvoiceRes.data.results) {
-            // Paginated response
-            manufacturerInvoiceConfig = manufacturerInvoiceRes.data.results[0] || null;
-          } else if (Array.isArray(manufacturerInvoiceRes.data)) {
-            // Array response
-            manufacturerInvoiceConfig = manufacturerInvoiceRes.data[0] || null;
-          } else {
-            // Single object response
-            manufacturerInvoiceConfig = manufacturerInvoiceRes.data || null;
+          // Determine which config types to fetch based on role
+          const configTypes = role === 'manufacturer' 
+            ? ['manufacturer_invoice'] 
+            : ['customer_invoice'];
+          
+          for (const configType of configTypes) {
+            const response = await api.get(`/management/number-configs/?business=${businessId}&config_type=${configType}`);
+            
+            let config = null;
+            if (response.data.results) {
+              // Paginated response
+              config = response.data.results[0] || null;
+            } else if (Array.isArray(response.data)) {
+              // Array response
+              config = response.data[0] || null;
+            } else {
+              // Single object response
+              config = response.data || null;
+            }
+            
+            configs[configType] = config;
+            forms[configType] = {
+              start_number: config?.start_number?.toString() || '',
+              prefix: config?.prefix || ''
+            };
           }
           
-          setNumberConfigs({ 
-            manufacturer_invoice: manufacturerInvoiceConfig 
-          });
-          
-          setNumberConfigForms({
-            manufacturer_invoice: {
-              start_number: manufacturerInvoiceConfig?.start_number?.toString() || '',
-              prefix: manufacturerInvoiceConfig?.prefix || ''
-            }
-          });
-        })
-        .catch(err => {
+          setNumberConfigs(configs);
+          setNumberConfigForms(forms);
+        } catch (err) {
           console.error("Number config error:", err);
           toast.error("Failed to load number configuration");
-        })
-        .finally(() => setNumberConfigLoading(false));
+        } finally {
+          setNumberConfigLoading(false);
+        }
+      };
+      
+      fetchConfigs();
     }
   }, [role, businessId]);
 
@@ -75,8 +89,13 @@ const Settings = ({ businessId }) => {
       };
 
       if (numberConfigs[configType]) {
-        // Update existing config
-        await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, payload);
+        // Update existing config - only send fields that can be updated
+        const updatePayload = {
+          start_number: parseInt(formData.start_number),
+          current_number: parseInt(formData.start_number),
+          prefix: formData.prefix || ''
+        };
+        await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, updatePayload);
         toast.success("Number configuration updated successfully!");
       } else {
         // Create new config
@@ -136,7 +155,7 @@ const Settings = ({ businessId }) => {
 
   const handleAccountDeletionSuccess = () => {
     // Logout user after successful account deletion
-    logout();
+    logout(true); // Skip API call since account is already deleted
   };
 
   return (
@@ -151,7 +170,7 @@ const Settings = ({ businessId }) => {
         {/* Compact Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Number Configuration */}
-          {role === 'manufacturer' && (
+          {(role === 'manufacturer' || role === 'customer') && (
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 rounded-full bg-blue-50 text-blue-600">
@@ -164,25 +183,30 @@ const Settings = ({ businessId }) => {
                 <div className="py-2 text-center text-sm text-gray-500">Loading configuration...</div>
               ) : (
                 <div className="space-y-4">
-                  {/* Manufacturer Invoice Numbering */}
+                  {/* Invoice Numbering */}
                   <div>
-                    <h3 className="text-sm font-medium mb-2">Manufacturer Invoice Numbering</h3>
-                    <form onSubmit={(e) => handleNumberConfigSave(e, 'manufacturer_invoice')} className="space-y-3">
+                    <h3 className="text-sm font-medium mb-2">
+                      {role === 'manufacturer' ? 'Manufacturer Invoice Numbering' : 'Customer Invoice Numbering'}
+                    </h3>
+                    <form onSubmit={(e) => handleNumberConfigSave(e, role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice')} className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Start Number</label>
                           <input
                             type="number"
                             name="start_number"
-                            value={numberConfigForms.manufacturer_invoice.start_number}
+                            value={numberConfigForms[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].start_number}
                             onChange={(e) => setNumberConfigForms(prev => ({
                               ...prev,
-                              manufacturer_invoice: { ...prev.manufacturer_invoice, start_number: e.target.value }
+                              [role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']: { 
+                                ...prev[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'], 
+                                start_number: e.target.value 
+                              }
                             }))}
-                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.manufacturer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                             min={1}
                             required
-                            disabled={numberConfigs.manufacturer_invoice}
+                            disabled={numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']}
                           />
                         </div>
                         <div>
@@ -190,44 +214,51 @@ const Settings = ({ businessId }) => {
                           <input
                             type="text"
                             name="prefix"
-                            value={numberConfigForms.manufacturer_invoice.prefix}
+                            value={numberConfigForms[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].prefix}
                             onChange={(e) => setNumberConfigForms(prev => ({
                               ...prev,
-                              manufacturer_invoice: { ...prev.manufacturer_invoice, prefix: e.target.value }
+                              [role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']: { 
+                                ...prev[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'], 
+                                prefix: e.target.value 
+                              }
                             }))}
-                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.manufacturer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                            className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                             maxLength={10}
-                            placeholder="MFG-INV-"
-                            disabled={numberConfigs.manufacturer_invoice}
+                            placeholder={role === 'manufacturer' ? "MFG-INV-" : "CUST-INV-"}
+                            disabled={numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']}
                           />
                         </div>
                       </div>
                       
                       <div className="flex items-center justify-between">
                         <div className="flex gap-2">
-                          {!numberConfigs.manufacturer_invoice && (
+                          {!numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] && (
                             <button
                               type="submit"
                               className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                              disabled={numberConfigSaving.manufacturer_invoice}
+                              disabled={numberConfigSaving[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']}
                             >
-                              {numberConfigSaving.manufacturer_invoice ? 'Saving...' : 'Save Format'}
+                              {numberConfigSaving[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] ? 'Saving...' : 'Save Format'}
                             </button>
                           )}
-                          {numberConfigs.manufacturer_invoice && (
+                          {numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] && (
                             <button
                               type="button"
-                              onClick={() => handleResetNumbering('manufacturer_invoice')}
+                              onClick={() => handleResetNumbering(role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice')}
                               className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                              disabled={numberConfigSaving.manufacturer_invoice}
+                              disabled={numberConfigSaving[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice']}
                             >
                               Reset Numbering
                             </button>
                           )}
                         </div>
-                        {numberConfigs.manufacturer_invoice && (
+                        {numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'] && (
                           <div className="text-sm text-gray-600">
-                            Current: <span className="font-medium">{numberConfigs.manufacturer_invoice.prefix ? `${numberConfigs.manufacturer_invoice.prefix}-${numberConfigs.manufacturer_invoice.current_number}` : numberConfigs.manufacturer_invoice.current_number}</span>
+                            Current: <span className="font-medium">
+                              {numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].prefix 
+                                ? `${numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].prefix}-${numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].current_number}` 
+                                : numberConfigs[role === 'manufacturer' ? 'manufacturer_invoice' : 'customer_invoice'].current_number}
+                            </span>
                           </div>
                         )}
                       </div>

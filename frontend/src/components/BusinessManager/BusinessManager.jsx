@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -7,8 +7,10 @@ import OrderManagement from './OrderManagement';
 import InvoiceManagement from './InvoiceManagement';
 import ProductManagement from './ProductManagement';
 import Settings from './Settings';
+import AIPredictionDashboard from './AIPredictionDashboard';
 import ProductPreviewModal from '../CustomerManager/modals/ProductPreviewModal';
 import InvoiceCreator from './modals/InvoiceCreator';
+
 import { FileText, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../../services/authService';
 
@@ -32,11 +34,13 @@ const BusinessManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [products, setProducts] = useState([]);
   // InvoiceCreator moved to InvoiceManagement component
+  const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
 
 
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [pendingCustomers, setPendingCustomers] = useState([]);
+  const [invoices, setInvoices] = useState([]);
 
   const colors = {
     primary: "#1C2E4A",
@@ -79,7 +83,16 @@ const BusinessManager = () => {
   const fetchData = async () => {
     try {
       console.log('Fetching products for business:', businessId);
-      const productsRes = await api.get(`/management/products/?business=${businessId}`);
+      
+      // Add timeout and error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const productsRes = await api.get(`/management/products/?business=${businessId}`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
       console.log('Products response:', productsRes.data);
       
       // Ensure we're getting an array
@@ -88,7 +101,11 @@ const BusinessManager = () => {
       
       setProducts(productsArray);
     } catch (err) {
-      console.error("Error fetching data:", err);
+      if (err.name === 'AbortError') {
+        console.error('Request timeout');
+      } else {
+        console.error("Error fetching data:", err);
+      }
       setProducts([]); // Set empty array on error
     }
   };
@@ -98,7 +115,15 @@ const BusinessManager = () => {
       console.log('Fetching orders for business:', businessId);
       const role = sessionStorage.getItem('role');
       if (role === 'manufacturer') {
-        const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
+        // Add timeout and error handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
         console.log('Orders response:', response.data);
         
         // Ensure we're getting an array
@@ -110,8 +135,56 @@ const BusinessManager = () => {
         setOrders([]); // Customers don't fetch orders here
       }
     } catch (err) {
-      console.error("Error fetching orders:", err);
+      if (err.name === 'AbortError') {
+        console.error('Request timeout');
+      } else {
+        console.error("Error fetching orders:", err);
+      }
       setOrders([]);
+    }
+  };
+
+  const fetchInvoices = async () => {
+    try {
+      console.log('Fetching invoices for business:', businessId);
+      const role = sessionStorage.getItem('role');
+      if (role === 'manufacturer') {
+        const response = await api.get(`/management/invoices/?business=${businessId}`);
+        console.log('Invoices response:', response.data);
+        
+        // Handle potential pagination - check if response.data has a 'results' property
+        let invoicesArray = [];
+        if (response.data && response.data.results) {
+          // Paginated response
+          invoicesArray = response.data.results;
+          console.log('Paginated response detected, using results array');
+        } else if (Array.isArray(response.data)) {
+          // Direct array response
+          invoicesArray = response.data;
+          console.log('Direct array response detected');
+        } else {
+          console.log('Unexpected response format:', typeof response.data, response.data);
+        }
+        
+        // Enhanced debugging for invoice data
+        console.log('Raw invoices response:', response.data);
+        console.log('Processed invoices array:', invoicesArray);
+        console.log('Invoice count by status:', invoicesArray.reduce((acc, inv) => {
+          acc[inv.status] = (acc[inv.status] || 0) + 1;
+          return acc;
+        }, {}));
+        
+        console.log('Invoices array length:', invoicesArray.length);
+        console.log('Paid invoices count:', invoicesArray.filter(inv => inv.status === 'paid').length);
+        console.log('All invoices:', invoicesArray.map(inv => ({ id: inv.id, status: inv.status, amount: inv.total_amount })));
+        
+        setInvoices(invoicesArray);
+      } else {
+        setInvoices([]); // Customers don't fetch invoices here
+      }
+    } catch (err) {
+      console.error("Error fetching invoices:", err);
+      setInvoices([]);
     }
   };
 
@@ -121,6 +194,7 @@ const BusinessManager = () => {
       fetchBusiness();
       fetchData();
       fetchOrders();
+      fetchInvoices();
     }
   }, [businessId]);
 
@@ -177,12 +251,13 @@ const BusinessManager = () => {
     navigate('/login');
   };
 
-  // Invoice creation handled by InvoiceManagement component
-  const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
+
 
   const handleCreateInvoiceFromHeader = () => {
     setShowInvoiceCreator(true);
   };
+
+
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -227,6 +302,7 @@ const BusinessManager = () => {
             products={products}
             customers={customers}
             orders={orders}
+            invoices={invoices}
             businessId={businessId}
             setActiveTab={setActiveTab}
           />
@@ -265,6 +341,12 @@ const BusinessManager = () => {
             showInvoiceCreator={showInvoiceCreator}
             setShowInvoiceCreator={setShowInvoiceCreator}
           />
+        )}
+
+
+
+        {activeTab === "predictions" && (
+          <AIPredictionDashboard businessId={businessId} colors={colors} />
         )}
 
         {activeTab === "settings" && (

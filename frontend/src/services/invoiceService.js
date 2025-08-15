@@ -113,9 +113,11 @@ export const updateInvoiceStatus = async (invoiceId, status) => {
 // Download invoice PDF
 export const downloadInvoicePDF = async (invoiceId) => {
   try {
+    console.log('🔄 invoiceService: Downloading invoice PDF for ID:', invoiceId);
     const response = await api.get(`/management/invoices/${invoiceId}/download/`, {
       responseType: 'blob'
     });
+    console.log('🔄 invoiceService: Download response received');
     return response.data;
   } catch (error) {
     console.error('Error downloading invoice PDF:', error);

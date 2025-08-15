@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from "react";
 import api from "../../services/authService";
-import { FiUpload, FiFile, FiSettings, FiEdit2, FiX, FiFileText, FiPlus, FiEye, FiCheck, FiTrash2, FiHash, FiUser, FiShield, FiAlertTriangle } from "react-icons/fi";
+import { FiHash, FiTrash2, FiUser, FiShield, FiAlertTriangle } from "react-icons/fi";
 import toast from 'react-hot-toast';
-
 import { useAuth } from '../../context/AuthContext';
 import AccountDeletionModal from '../shared/AccountDeletionModal';
 
 const Settings = ({ businessId }) => {
-  const { role, logout } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const { getRole, logout } = useAuth();
+  const role = getRole();
   const [numberConfigs, setNumberConfigs] = useState({ 
-    order: null
+    order: null,
+    customer_invoice: null
   });
   const [numberConfigLoading, setNumberConfigLoading] = useState(false);
   const [numberConfigForms, setNumberConfigForms] = useState({
-    order: { start_number: '', prefix: '' }
+    order: { start_number: '', prefix: '' },
+    customer_invoice: { start_number: '', prefix: '' }
   });
   const [numberConfigSaving, setNumberConfigSaving] = useState({ 
-    order: false
+    order: false,
+    customer_invoice: false
   });
-  const [activeNumberTab, setActiveNumberTab] = useState('order');
-  const [activeOverlay, setActiveOverlay] = useState(null);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState('order');
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
   useEffect(() => {
@@ -30,12 +30,25 @@ const Settings = ({ businessId }) => {
       
       const fetchNumberConfigs = async () => {
         try {
-          const response = await api.get(`/management/number-configs/?business=${businessId}&config_type=order`);
+          // Fetch all number configs for this business first
+          const allConfigsResponse = await api.get(`/management/number-configs/?business=${businessId}`);
           
-          const orderConfig = response.data && response.data.length > 0 ? response.data[0] : null;
+          let allConfigs = [];
+          if (allConfigsResponse.data.results) {
+            allConfigs = allConfigsResponse.data.results;
+          } else if (Array.isArray(allConfigsResponse.data)) {
+            allConfigs = allConfigsResponse.data;
+          } else {
+            allConfigs = [allConfigsResponse.data];
+          }
+          
+          // Filter by config_type to get the correct configurations
+          const orderConfig = allConfigs.find(config => config.config_type === 'order') || null;
+          const customerInvoiceConfig = allConfigs.find(config => config.config_type === 'customer_invoice') || null;
           
           setNumberConfigs({
-            order: orderConfig
+            order: orderConfig,
+            customer_invoice: customerInvoiceConfig
           });
           
           // Set form values
@@ -43,10 +56,18 @@ const Settings = ({ businessId }) => {
             order: {
               start_number: orderConfig?.start_number || '',
               prefix: orderConfig?.prefix || ''
+            },
+            customer_invoice: {
+              start_number: customerInvoiceConfig?.start_number || '',
+              prefix: customerInvoiceConfig?.prefix || ''
             }
           });
+          
+
+          
         } catch (error) {
           console.error('Error fetching number configs:', error);
+          console.error('Error response:', error.response?.data);
           // Don't show error toast for 404 - just means no config exists yet
           if (error.response?.status !== 404) {
             toast.error('Failed to load number configurations');
@@ -66,252 +87,403 @@ const Settings = ({ businessId }) => {
     
     try {
       const formData = numberConfigForms[configType];
-      const response = await api.post('/management/number-configs/', {
-        ...formData,
+      
+      const payload = {
         business: businessId,
-        config_type: configType
+        config_type: configType,
+        start_number: parseInt(formData.start_number),
+        current_number: parseInt(formData.start_number),
+        prefix: formData.prefix || ''
+      };
+
+      if (numberConfigs[configType]) {
+        // Update existing config - only send fields that can be updated
+        const updatePayload = {
+          start_number: parseInt(formData.start_number),
+          current_number: parseInt(formData.start_number),
+          prefix: formData.prefix || ''
+        };
+        await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, updatePayload);
+        toast.success("Number configuration updated successfully!");
+      } else {
+        // Create new config
+        await api.post("/management/number-configs/", payload);
+        toast.success("Number configuration created successfully!");
+      }
+
+      // Refresh the configs by fetching all configs again
+      const allConfigsResponse = await api.get(`/management/number-configs/?business=${businessId}`);
+      console.log(`Refresh response:`, allConfigsResponse.data);
+      
+      let allConfigs = [];
+      if (allConfigsResponse.data.results) {
+        allConfigs = allConfigsResponse.data.results;
+      } else if (Array.isArray(allConfigsResponse.data)) {
+        allConfigs = allConfigsResponse.data;
+      } else {
+        allConfigs = [allConfigsResponse.data];
+      }
+      
+      // Filter by config_type to get the correct configurations
+      const orderConfig = allConfigs.find(config => config.config_type === 'order') || null;
+      const customerInvoiceConfig = allConfigs.find(config => config.config_type === 'customer_invoice') || null;
+      
+      console.log(`New filtered configs:`, { order: orderConfig, customer_invoice: customerInvoiceConfig });
+      
+      setNumberConfigs({
+        order: orderConfig,
+        customer_invoice: customerInvoiceConfig
       });
       
-      setNumberConfigs(prev => ({ ...prev, [configType]: response.data }));
-      toast.success(`${configType.charAt(0).toUpperCase() + configType.slice(1)} numbering configuration saved successfully!`);
-    } catch (error) {
-      console.error(`Error saving ${configType} config:`, error);
-      if (error.response?.status === 400) {
-        toast.error(error.response.data?.error || `Invalid ${configType} configuration`);
-      } else {
-        toast.error(`Failed to save ${configType} configuration`);
-      }
+    } catch (err) {
+      console.error(`Save number config error for ${configType}:`, err);
+      console.error('Error response:', err.response?.data);
+      toast.error("Failed to save number configuration");
     } finally {
       setNumberConfigSaving(prev => ({ ...prev, [configType]: false }));
     }
   };
 
   const handleResetNumbering = async (configType) => {
-    if (!window.confirm(`Are you sure you want to reset the ${configType} numbering? This will reset the current number to the start number.`)) {
-      return;
-    }
+    if (!numberConfigs[configType]) return;
+    
+    setNumberConfigSaving(prev => ({ ...prev, [configType]: true }));
     
     try {
-      // For now, we'll just update the current number to match start number
-      const currentConfig = numberConfigs[configType];
-      if (currentConfig) {
-        const response = await api.put(`/management/number-configs/${currentConfig.id}/`, {
-          ...currentConfig,
-          current_number: currentConfig.start_number
-        });
-        
-        setNumberConfigs(prev => ({ ...prev, [configType]: response.data }));
-        toast.success(`${configType.charAt(0).toUpperCase() + configType.slice(1)} numbering reset successfully!`);
-      }
-    } catch (error) {
-      console.error(`Error resetting ${configType} numbering:`, error);
-      toast.error(`Failed to reset ${configType} numbering`);
+      console.log(`Resetting numbering for ${configType}:`, numberConfigs[configType]);
+      
+      await api.put(`/management/number-configs/${numberConfigs[configType].id}/`, {
+        current_number: numberConfigs[configType].start_number
+      });
+      
+      // Update local state
+      setNumberConfigs(prev => ({
+        ...prev,
+        [configType]: {
+          ...prev[configType],
+          current_number: prev[configType].start_number
+        }
+      }));
+      
+      toast.success("Numbering reset successfully!");
+    } catch (err) {
+      console.error(`Reset numbering error for ${configType}:`, err);
+      toast.error("Failed to reset numbering");
+    } finally {
+      setNumberConfigSaving(prev => ({ ...prev, [configType]: false }));
     }
   };
 
   const handleDeleteNumberConfig = async (configType) => {
-    if (!window.confirm(`Are you sure you want to delete the ${configType} numbering configuration? This action cannot be undone.`)) {
+    if (!numberConfigs[configType]) return;
+    
+    const configLabel = configType === 'order' ? 'Order' : 'Customer Invoice';
+    
+    if (!window.confirm(`Are you sure you want to delete the ${configLabel.toLowerCase()} numbering configuration? This action cannot be undone.`)) {
       return;
     }
     
+    setNumberConfigSaving(prev => ({ ...prev, [configType]: true }));
+    
     try {
-      const currentConfig = numberConfigs[configType];
-      if (currentConfig) {
-        await api.delete(`/management/number-configs/${currentConfig.id}/`);
-        
-        setNumberConfigs(prev => ({ ...prev, [configType]: null }));
-        setNumberConfigForms(prev => ({
-          ...prev,
-          [configType]: { start_number: '', prefix: '' }
-        }));
-        
-        toast.success(`${configType.charAt(0).toUpperCase() + configType.slice(1)} numbering configuration deleted successfully!`);
-      }
-    } catch (error) {
-      console.error(`Error deleting ${configType} config:`, error);
-      toast.error(`Failed to delete ${configType} configuration`);
+      console.log(`Deleting ${configType} config:`, numberConfigs[configType]);
+      
+      await api.delete(`/management/number-configs/${numberConfigs[configType].id}/`);
+      
+      // Update local state to remove the deleted config
+      setNumberConfigs(prev => ({
+        ...prev,
+        [configType]: null
+      }));
+      
+      // Reset form values for the deleted config
+      setNumberConfigForms(prev => ({
+        ...prev,
+        [configType]: { start_number: '', prefix: '' }
+      }));
+      
+      toast.success(`${configLabel} numbering configuration deleted successfully!`);
+    } catch (err) {
+      console.error(`Delete number config error for ${configType}:`, err);
+      toast.error("Failed to delete number configuration");
+    } finally {
+      setNumberConfigSaving(prev => ({ ...prev, [configType]: false }));
     }
   };
 
   const handleAccountDeletionSuccess = () => {
-    logout();
+    // Logout user after successful account deletion
+    logout(true); // Skip API call since account is already deleted
   };
 
+  const getTabLabel = (configType) => {
+    switch (configType) {
+      case 'order':
+        return 'Orders';
+      case 'customer_invoice':
+        return 'Invoices';
+      default:
+        return configType;
+    }
+  };
+
+  const getTabIcon = (configType) => {
+    switch (configType) {
+      case 'order':
+        return '📋';
+      case 'customer_invoice':
+        return '🧾';
+      default:
+        return '⚙️';
+    }
+  };
+
+  const getCurrentNumber = (configType) => {
+    const config = numberConfigs[configType];
+    if (!config) return null;
+    return config.prefix ? `${config.prefix}-${config.current_number}` : config.current_number;
+  };
+
+  // Debug: Log current state
+  useEffect(() => {
+
+  }, [numberConfigs, activeTab]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Manage your account settings and preferences
-          </p>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">Business Settings</h1>
+          <p className="text-gray-600">Manage your business configuration</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left Column (Numbering & Forms) */}
-          <div className="space-y-6">
-            {/* Numbering Configuration */}
+        {/* Compact Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Number Configuration */}
+          {role === 'customer' && (
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 rounded-full bg-blue-50 text-blue-600">
                   <FiHash className="w-4 h-4" />
                 </div>
-                <h2 className="font-medium">Numbering Configuration</h2>
+                <h2 className="font-medium">Number Configuration</h2>
+              </div>
+              
+              {/* Compact Tabs */}
+              <div className="flex border-b border-gray-200 mb-4">
+                {['order', 'customer_invoice'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                      activeTab === tab
+                        ? 'border-blue-500 text-blue-600 bg-blue-50'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-sm">{getTabIcon(tab)}</span>
+                    <span>{getTabLabel(tab)}</span>
+                    {getCurrentNumber(tab) && (
+                      <span className="ml-1 text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
+                        {getCurrentNumber(tab)}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
               
               {numberConfigLoading ? (
-                <div className="text-center py-4 text-sm text-gray-500">Loading configurations...</div>
+                <div className="py-2 text-center text-sm text-gray-500">Loading configuration...</div>
               ) : (
                 <div className="space-y-4">
-                  {/* Order Numbering */}
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-full bg-blue-50 text-blue-600">
-                          <FiFileText className="w-3 h-3" />
-                        </div>
+                  {/* Order Numbering Tab */}
+                  {activeTab === 'order' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-medium">Order Numbering</h3>
+                        {numberConfigs.order && (
+                          <span className="text-xs text-gray-500">
+                            Current: <span className="font-medium">{getCurrentNumber('order')}</span>
+                          </span>
+                        )}
                       </div>
-                      {numberConfigs.order && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleResetNumbering('order')}
-                            className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-                          >
-                            Reset
-                          </button>
-                          <button
-                            onClick={() => handleDeleteNumberConfig('order')}
-                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
-                          >
-                            Delete
-                          </button>
+                      {!numberConfigs.order && (
+                        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-xs text-blue-700">
+                            <strong>Setup Required:</strong> Configure your order numbering format to automatically generate order numbers.
+                          </p>
                         </div>
                       )}
-                    </div>
-                    
-                    {numberConfigs.order ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-600">Current Number:</span>
-                          <span className="font-medium">{numberConfigs.order.current_number}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-600">Prefix:</span>
-                          <span className="font-medium">{numberConfigs.order.prefix || 'None'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-600">Start Number:</span>
-                          <span className="font-medium">{numberConfigs.order.start_number}</span>
-                        </div>
-                      </div>
-                    ) : (
                       <form onSubmit={(e) => handleNumberConfigSave(e, 'order')} className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Start Number
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={numberConfigForms.order.start_number}
-                            onChange={(e) => setNumberConfigForms(prev => ({
-                              ...prev,
-                              order: { ...prev.order, start_number: e.target.value }
-                            }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="1"
-                            required
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Start Number</label>
+                            <input
+                              type="number"
+                              name="start_number"
+                              value={numberConfigForms.order.start_number}
+                              onChange={(e) => setNumberConfigForms(prev => ({
+                                ...prev,
+                                order: { ...prev.order, start_number: e.target.value }
+                              }))}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.order ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              min={1}
+                              required
+                              disabled={numberConfigs.order}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Prefix</label>
+                            <input
+                              type="text"
+                              name="prefix"
+                              value={numberConfigForms.order.prefix}
+                              onChange={(e) => setNumberConfigForms(prev => ({
+                                ...prev,
+                                order: { ...prev.order, prefix: e.target.value }
+                              }))}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.order ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              maxLength={10}
+                              placeholder="ORD-"
+                              disabled={numberConfigs.order}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Prefix (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={numberConfigForms.order.prefix}
-                            onChange={(e) => setNumberConfigForms(prev => ({
-                              ...prev,
-                              order: { ...prev.order, prefix: e.target.value }
-                            }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="ORD"
-                          />
+                        
+                        <div className="flex gap-2">
+                          {!numberConfigs.order && (
+                            <button
+                              type="submit"
+                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                              disabled={numberConfigSaving.order}
+                            >
+                              {numberConfigSaving.order ? 'Saving...' : 'Save Format'}
+                            </button>
+                          )}
+                          {numberConfigs.order && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleResetNumbering('order')}
+                                className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                                disabled={numberConfigSaving.order}
+                              >
+                                Reset Numbering
+                              </button>
+                              <div className="flex-1"></div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteNumberConfig('order')}
+                                className="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 flex items-center gap-1"
+                                disabled={numberConfigSaving.order}
+                                title="Delete configuration"
+                              >
+                                <FiTrash2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
                         </div>
-                        <button
-                          type="submit"
-                          disabled={numberConfigSaving.order}
-                          className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-                        >
-                          {numberConfigSaving.order ? 'Saving...' : 'Save Configuration'}
-                        </button>
                       </form>
-                    )}
-                  </div>
+                    </div>
+                  )}
+
+                  {/* Customer Invoice Numbering Tab */}
+                  {activeTab === 'customer_invoice' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium">Customer Invoice Numbering</h3>
+                        {numberConfigs.customer_invoice && (
+                          <span className="text-xs text-gray-500">
+                            Current: <span className="font-medium">{getCurrentNumber('customer_invoice')}</span>
+                          </span>
+                        )}
+                      </div>
+                      {!numberConfigs.customer_invoice && (
+                        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-xs text-blue-700">
+                            <strong>Setup Required:</strong> Configure your invoice numbering format to automatically generate invoice numbers.
+                          </p>
+                        </div>
+                      )}
+                      <form onSubmit={(e) => handleNumberConfigSave(e, 'customer_invoice')} className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Start Number</label>
+                            <input
+                              type="number"
+                              name="start_number"
+                              value={numberConfigForms.customer_invoice.start_number}
+                              onChange={(e) => setNumberConfigForms(prev => ({
+                                ...prev,
+                                customer_invoice: { ...prev.customer_invoice, start_number: e.target.value }
+                              }))}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.customer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              min={1}
+                              required
+                              disabled={numberConfigs.customer_invoice}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Prefix</label>
+                            <input
+                              type="text"
+                              name="prefix"
+                              value={numberConfigForms.customer_invoice.prefix}
+                              onChange={(e) => setNumberConfigForms(prev => ({
+                                ...prev,
+                                customer_invoice: { ...prev.customer_invoice, prefix: e.target.value }
+                              }))}
+                              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${numberConfigs.customer_invoice ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              maxLength={10}
+                              placeholder="CUST-INV-"
+                              disabled={numberConfigs.customer_invoice}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {!numberConfigs.customer_invoice && (
+                            <button
+                              type="submit"
+                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                              disabled={numberConfigSaving.customer_invoice}
+                            >
+                              {numberConfigSaving.customer_invoice ? 'Saving...' : 'Save Format'}
+                            </button>
+                          )}
+                          {numberConfigs.customer_invoice && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleResetNumbering('customer_invoice')}
+                                className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                                disabled={numberConfigSaving.customer_invoice}
+                              >
+                                Reset Numbering
+                              </button>
+                              <div className="flex-1"></div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteNumberConfig('customer_invoice')}
+                                className="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 flex items-center gap-1"
+                                disabled={numberConfigSaving.customer_invoice}
+                                title="Delete configuration"
+                              >
+                                <FiTrash2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </form>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-          
-          {/* Right Column (Account Management) */}
-          <div className="md:col-span-1 space-y-6">
-            {/* Account Management */}
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-full bg-red-50 text-red-600">
-                  <FiUser className="w-4 h-4" />
-                </div>
-                <h2 className="font-medium">Account Management</h2>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Account Security</h3>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Manage your account settings and security preferences
-                  </p>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <FiShield className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-700">Account Status</span>
-                      </div>
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                        Active
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <FiUser className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-700">User Type</span>
-                      </div>
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full capitalize">
-                        {role}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-sm font-medium mb-2 text-red-700">Danger Zone</h3>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Irreversible and destructive actions
-                  </p>
-                  
-                  <button
-                    onClick={() => setShowDeleteAccountModal(true)}
-                    className="w-full px-4 py-3 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <FiAlertTriangle className="w-4 h-4" />
-                    Delete Account
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
+
+
         </div>
       </div>
 

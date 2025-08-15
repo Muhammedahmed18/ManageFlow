@@ -3,7 +3,10 @@ from .models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from business.models import Business
+from django.contrib.auth import get_user_model
+from .models import UserSettings
 
+User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     business = serializers.SerializerMethodField()
@@ -81,3 +84,18 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['is_approved'] = bool(user.is_approved)
         data['role'] = user.role
         return data
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserSettings
+        fields = [
+            'profile_visibility', 'business_visibility', 'contact_info_visibility', 
+            'allow_contact_requests', 'auto_approve_requests', 'require_approval', 
+            'max_businesses', 'default_visibility'
+        ]
+    
+    def create(self, validated_data):
+        # Create settings for the current user
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return super().create(validated_data)

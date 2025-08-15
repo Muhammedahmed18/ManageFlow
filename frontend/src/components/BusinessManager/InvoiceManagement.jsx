@@ -15,12 +15,18 @@ import {
 import api from '../../services/authService';
 import toast from 'react-hot-toast';
 import InvoiceCreator from './modals/InvoiceCreator';
+import InvoicePreviewModal from './modals/InvoicePreviewModal';
 
 const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvoiceCreator }) => {
+  // Debug: Log businessId
+  console.log('🔄 InvoiceManagement: businessId received:', businessId);
+  console.log('🔄 InvoiceManagement: businessId type:', typeof businessId);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
+  const [previewInvoice, setPreviewInvoice] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState('all');
@@ -206,6 +212,11 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
     setShowInvoiceCreator(true);
   };
 
+  const handlePreviewInvoice = (invoice) => {
+    setPreviewInvoice(invoice);
+    setShowPreview(true);
+  };
+
   const handleDeleteInvoice = async (invoiceId) => {
     if (window.confirm('Are you sure you want to delete this invoice?')) {
       try {
@@ -257,11 +268,6 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
 
   return (
     <div className="p-6 min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-1" style={{ color: '#0F1A2B' }}>Invoices</h1>
-        <p className="text-sm" style={{ color: '#52677D' }}>Manage and track all invoices for your business</p>
-      </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -299,6 +305,8 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
         </div>
       </div>
 
+
+
       {/* Invoices Table */}
       <div className="bg-white rounded-lg shadow-sm border overflow-hidden" style={{ borderColor: '#E2E8F0' }}>
         {filteredInvoices.length === 0 ? (
@@ -310,17 +318,9 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
             <p className="text-sm mb-6" style={{ color: '#52677D' }}>
               {searchTerm || statusFilter !== 'all' 
                 ? 'Try adjusting your search or filters' 
-                : 'Create your first invoice to get started'
+                : 'Use the "Create Invoice" button in the header to create your first invoice from delivered orders'
               }
             </p>
-            <button
-              onClick={handleCreateInvoice}
-              className="px-4 py-2 rounded-lg font-medium text-white shadow hover:shadow-md transition-all flex items-center gap-2 mx-auto"
-              style={{ backgroundColor: '#1C2E4A' }}
-            >
-              <Plus size={16} />
-              Create Invoice
-            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -344,9 +344,14 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
                     style={{ borderColor: '#E2E8F0' }}
                   >
                     <td className="py-3 px-4">
-                      <div className="font-medium text-sm" style={{ color: '#0F1A2B' }}>
+                      <button
+                        onClick={() => handlePreviewInvoice(invoice)}
+                        className="font-medium text-sm hover:text-blue-600 transition-colors cursor-pointer"
+                        style={{ color: '#0F1A2B' }}
+                        title="Click to preview invoice"
+                      >
                         {invoice.invoice_number}
-                      </div>
+                      </button>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
@@ -421,11 +426,18 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
             <InvoiceCreator
               businessId={businessId}
               editInvoice={editingInvoice}
-              onCreated={() => {
-                setShowInvoiceCreator(false);
-                setEditingInvoice(null);
-                fetchInvoices();
-                toast.success(editingInvoice ? 'Invoice updated successfully!' : 'Invoice created successfully!');
+              onSave={async (createdInvoice) => {
+                try {
+                  // The invoice is already created by InvoiceCreator component
+                  // Just refresh the list and show success message
+                  setShowInvoiceCreator(false);
+                  setEditingInvoice(null);
+                  fetchInvoices();
+                  toast.success(editingInvoice ? 'Invoice updated successfully!' : 'Invoice created successfully!');
+                } catch (error) {
+                  console.error('Error handling invoice creation:', error);
+                  toast.error('Failed to handle invoice creation');
+                }
               }}
               onClose={() => {
                 setShowInvoiceCreator(false);
@@ -434,6 +446,18 @@ const InvoiceManagement = ({ businessId, colors, showInvoiceCreator, setShowInvo
             />
           </motion.div>
         </div>
+      )}
+
+      {/* Invoice Preview Modal */}
+      {showPreview && previewInvoice && (
+        <InvoicePreviewModal
+          invoice={previewInvoice}
+          onClose={() => {
+            setShowPreview(false);
+            setPreviewInvoice(null);
+          }}
+          colors={colors}
+        />
       )}
     </div>
   );

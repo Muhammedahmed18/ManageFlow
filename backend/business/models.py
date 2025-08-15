@@ -18,7 +18,7 @@ class Business(models.Model):
     pending_manufacturers = models.ManyToManyField(User, related_name='pending_businesses', blank=True)
     rejected_manufacturers = models.ManyToManyField(User, related_name='rejected_businesses', blank=True)
     slogan = models.CharField(max_length=255, blank=True, null=True)
-    shipping_country = models.CharField(max_length=100)
+    is_public = models.BooleanField(default=True, help_text="Whether this business is visible to manufacturers in discovery")
 
     def save(self, *args, **kwargs):
         if not self.invite_code:

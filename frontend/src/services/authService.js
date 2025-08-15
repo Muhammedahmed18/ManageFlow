@@ -1,30 +1,48 @@
 import axios from 'axios';
 
+// Create axios instance with base configuration
 const api = axios.create({
   baseURL: 'http://localhost:8000/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add the access token to every request
-api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("accessToken");
-  if (token) {
-    config.headers["Authorization"] = `Bearer ${token}`;
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = sessionStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Don't set Content-Type for FormData - let browser set multipart/form-data automatically
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// Handle token expiration and retry requests
+// Response interceptor for token refresh
 api.interceptors.response.use(
-  response => response,
+  (response) => {
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
-    const isExpired = error.response?.status === 401 && !originalRequest._retry;
 
-    if (isExpired) {
+    // Handle token expiration
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       const refreshToken = sessionStorage.getItem("refreshToken");
 
       if (!refreshToken) {
+        console.warn('No refresh token available, redirecting to login');
         sessionStorage.clear();
         localStorage.setItem("loginRedirectMessage", "Your session has expired. Please log in again.");
         window.location.href = "/login";
@@ -32,20 +50,26 @@ api.interceptors.response.use(
       }
 
       try {
+        console.log('Attempting to refresh token...');
         const res = await api.post("/auth/refresh/", { refresh: refreshToken });
         const { access, refresh } = res.data;
 
-        if (access) sessionStorage.setItem("accessToken", access);
-        if (refresh) sessionStorage.setItem("refreshToken", refresh);
-
-        originalRequest.headers["Authorization"] = `Bearer ${access}`;
-        window.dispatchEvent(new Event("tokenRefreshed"));
-        return api(originalRequest);
+        if (access) {
+          sessionStorage.setItem("accessToken", access);
+          if (refresh) {
+            sessionStorage.setItem("refreshToken", refresh);
+          }
+          
+          // Update the original request with new token
+          originalRequest.headers["Authorization"] = `Bearer ${access}`;
+          
+          // Retry the original request
+          return api(originalRequest);
+        }
       } catch (refreshError) {
-        // Token is blacklisted or invalid
+        console.error('Token refresh failed:', refreshError);
         sessionStorage.clear();
         localStorage.setItem("loginRedirectMessage", "Your session has expired. Please log in again.");
-        localStorage.setItem("lastEmail", sessionStorage.getItem("lastEmail") || "");
         window.location.href = "/login";
         return Promise.reject(refreshError);
       }
@@ -55,13 +79,32 @@ api.interceptors.response.use(
   }
 );
 
-// Auth APIs
-export const sendRegistrationOTP = async (userData) => {
+// Simple authentication functions
+export const loginUser = async (username, password, business_id, role) => {
   try {
-    const response = await api.post('/auth/send-registration-otp/', userData);
+    const requestData = {
+      username,
+      password
+    };
+    
+    // Only add role if it's provided
+    if (role) {
+      requestData.role = role;
+    }
+    
+    // Only add business_id if it's provided and not null
+    if (business_id) {
+      requestData.business_id = business_id;
+    }
+    
+    console.log('Login request data:', requestData);
+    
+    const response = await api.post('/auth/login/', requestData);
+    console.log('Login response:', response.data);
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Failed to send registration OTP' };
+    console.error('Login error details:', error.response?.data);
+    throw error;
   }
 };
 
@@ -70,7 +113,16 @@ export const registerUser = async (userData) => {
     const response = await api.post('/auth/register/', userData);
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Registration failed' };
+    throw error;
+  }
+};
+
+export const sendRegistrationOTP = async (userData) => {
+  try {
+    const response = await api.post('/auth/send-registration-otp/', userData);
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -79,68 +131,8 @@ export const verifyOTP = async (email, otp) => {
     const response = await api.post('/auth/verify-otp/', { email, otp });
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'OTP verification failed' };
+    throw error;
   }
-};
-
-export const loginUser = async (username, password, business_id = null, role = null) => {
-  const payload = { username, password };
-  if (business_id) payload.business_id = business_id;
-  if (role) payload.role = role;
-
-  try {
-    const response = await api.post('/auth/login/', payload);
-    const { access, refresh, role: returnedRole, is_approved } = response.data;
-
-    // ✅ Block login if backend returned different role
-    if (role && returnedRole && role !== returnedRole) {
-      throw {
-        response: {
-          status: 400,
-          data: {
-            detail: `This account is a ${returnedRole}, not a ${role}.`
-          }
-        }
-      };
-    }
-
-    // ✅ Store tokens only if everything checks out
-    if (access && refresh) {
-      sessionStorage.setItem("accessToken", access);
-      sessionStorage.setItem("refreshToken", refresh);
-      localStorage.setItem("lastEmail", username);
-    }
-
-    return response.data;
-  } catch (error) {
-    // Always throw an error object with a .response property for consistent frontend handling
-    if (error.response) {
-      throw error;
-    } else if (error.detail) {
-      throw {
-        response: {
-          status: 400,
-          data: { detail: error.detail }
-        }
-      };
-    } else {
-      throw {
-        response: {
-          status: 400,
-          data: { detail: error.message || 'Login failed' }
-        }
-      };
-    }
-  }
-};
-
-export const logoutUser = async () => {
-  try {
-    const refresh = sessionStorage.getItem('refreshToken');
-    await api.post('/auth/logout/', { refresh });
-  } catch {}
-  sessionStorage.removeItem('accessToken');
-  sessionStorage.removeItem('refreshToken');
 };
 
 export const forgotPassword = async (email) => {
@@ -148,16 +140,7 @@ export const forgotPassword = async (email) => {
     const response = await api.post('/auth/send-reset-otp/', { email });
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Failed to send reset OTP' };
-  }
-};
-
-export const resendRegistrationOTP = async (email) => {
-  try {
-    const response = await api.post('/auth/resend-registration-otp/', { email });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || { message: 'Failed to resend registration OTP' };
+    throw error;
   }
 };
 
@@ -170,7 +153,16 @@ export const resetPassword = async (email, otp, newPassword) => {
     });
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Password reset failed' };
+    throw error;
+  }
+};
+
+export const resendRegistrationOTP = async (email) => {
+  try {
+    const response = await api.post('/auth/resend-registration-otp/', { email });
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -179,33 +171,36 @@ export const getUserProfile = async () => {
     const response = await api.get('/auth/profile/');
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: 'Failed to fetch profile' };
+    throw error;
   }
 };
 
-export const handleDeleteAccount = async (password) => {
+export const updateUserProfile = async (profileData) => {
   try {
-    // First verify the password
-    const verifyResponse = await api.post('/auth/verify-password/', { password });
-    
-    if (verifyResponse.data.valid) {
-      // Then delete the account with password verification
-      await api.delete('/auth/delete-account/', { data: { password } });
-      await logoutUser();
-      return { success: true, message: 'Account deleted successfully.' };
-    } else {
-      throw new Error('Incorrect password');
-    }
-  } catch (err) {
-    console.error('Failed to delete account:', err);
-    if (err.response?.status === 400) {
-      throw new Error('Incorrect password. Please try again.');
-    } else {
-      throw new Error('Failed to delete account. Please try again.');
-    }
+    const response = await api.put('/auth/profile/', profileData);
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 
+export const logoutUser = async (skipApiCall = false) => {
+  try {
+    // Skip API call if account was deleted or if explicitly requested
+    if (!skipApiCall) {
+      const refresh = sessionStorage.getItem("refreshToken");
+      if (refresh) {
+        await api.post('/auth/logout/', { refresh });
+      }
+    }
+  } catch (error) {
+    console.warn('Logout API call failed:', error);
+  } finally {
+    sessionStorage.clear();
+  }
+};
+
+export { api };
 export default api;
 
 

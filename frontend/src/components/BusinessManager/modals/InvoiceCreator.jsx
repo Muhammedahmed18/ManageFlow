@@ -21,7 +21,7 @@ import {
 import api from '../../../services/authService';
 import toast from 'react-hot-toast';
 
-const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, selectedOrder = null }) => {
+const InvoiceCreator = ({ businessId, onClose, onSave, editInvoice = null, selectedOrder = null, selectedEndCustomer = null }) => {
   // Form state
   const [formData, setFormData] = useState({
     // Invoice Metadata
@@ -29,9 +29,9 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
     po_number: '',
     
     // Customer/Bill To
-    customer_name: '',
-    bill_to: '',
-    contact_info: '',
+    customer_name: selectedEndCustomer?.name || '',
+    bill_to: selectedEndCustomer?.address || '',
+    contact_info: selectedEndCustomer?.contact_person || '',
     
     // Line Items
     line_items: [
@@ -41,6 +41,7 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
     // Totals
     subtotal: 0,
     sales_tax: 0,
+    sales_tax_rate: 0,
     gross_total: 0,
     advanced_paid: 0,
     balance_due: 0,
@@ -82,20 +83,31 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
 
   // Load data on component mount
   useEffect(() => {
-    console.log('InvoiceCreator useEffect - editInvoice:', editInvoice, 'selectedOrder:', selectedOrder);
+    console.log('InvoiceCreator useEffect - editInvoice:', editInvoice, 'selectedOrder:', selectedOrder, 'selectedEndCustomer:', selectedEndCustomer);
     loadOrders();
     
     if (editInvoice) {
       loadInvoiceForEdit();
-      // Start at step 2 (Invoice Details) when editing
+      // Start at step 2 (Invoice Details) when editing since orders are read-only
       setActiveStep(2);
     } else if (selectedOrder) {
       // Auto-populate form with selected order data
       autoPopulateFromOrder(selectedOrder);
       // Start at step 2 (Invoice Details) when creating from order
       setActiveStep(2);
+    } else if (selectedEndCustomer) {
+      // Pre-populate form with selected end customer data
+      setFormData(prev => ({
+        ...prev,
+        customer_name: selectedEndCustomer.name,
+        bill_to: selectedEndCustomer.address || '',
+        contact_info: selectedEndCustomer.contact_person || selectedEndCustomer.email || ''
+      }));
+      // Start at step 1 (Order Selection) for customer-side invoice creation
+      // Allow customers to select which orders to include in the invoice
+      setActiveStep(1);
     }
-  }, [businessId, editInvoice, selectedOrder]);
+  }, [businessId, editInvoice, selectedOrder, selectedEndCustomer]);
 
   const autoPopulateFromOrder = (order) => {
     console.log('Auto-populating from order:', order);
@@ -128,8 +140,8 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
     console.log('Generated line items:', lineItems);
     
     // Update form data with auto-populated values
-    setFormData(prev => ({
-      ...prev,
+      setFormData(prev => ({
+        ...prev,
       customer_name: customerName,
       line_items: lineItems
     }));
@@ -143,17 +155,57 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
 
   const loadOrders = async () => {
     try {
-      const response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
-      const allOrders = response.data.results || response.data || [];
-      console.log('InvoiceCreator: Loaded all orders:', allOrders.map(o => ({ 
-        order_number: o.order_number, 
-        status: o.status,
-        customer: o.customer?.username || o.customer_name 
-      })));
-      setOrders(allOrders);
+      let response;
+      let allOrders = [];
+      
+      if (selectedEndCustomer) {
+        // For customer-side invoice creation, load orders that customers can access
+        // This should be orders that the customer has created or has access to
+        console.log('InvoiceCreator: Loading orders for customer-side invoice creation');
+        try {
+          // Try to load customer orders first
+          response = await api.get(`/management/customer/orders/?business=${businessId}`);
+          allOrders = response.data.results || response.data || [];
+          console.log('InvoiceCreator: Loaded customer orders:', allOrders.length);
+        } catch (error) {
+          console.log('InvoiceCreator: Customer orders endpoint not available, trying manufacturer orders');
+          // Fallback to manufacturer orders if customer orders endpoint doesn't exist
+          response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
+          allOrders = response.data.results || response.data || [];
+        }
+        
+        // Filter orders for the specific end customer
+        const filteredOrders = allOrders.filter(order => {
+          const orderCustomerName = order.data?.customer || 
+                                   order.customer_name || 
+                                   order.customer?.username || 
+                                   order.customer?.first_name || 
+                                   order.customer?.last_name;
+          const matchesCustomer = orderCustomerName && 
+            orderCustomerName.toLowerCase().includes(selectedEndCustomer.name.toLowerCase());
+          
+          // Also check if order status is appropriate for invoicing
+          const validStatus = ['completed', 'shipped', 'delivered'].includes(order.status?.toLowerCase());
+          
+          console.log(`Order ${order.order_number}: customer="${orderCustomerName}", status="${order.status}", matches=${matchesCustomer}, validStatus=${validStatus}`);
+          
+          return matchesCustomer && validStatus;
+        });
+        
+        console.log('InvoiceCreator: Filtered orders for customer', selectedEndCustomer.name, ':', filteredOrders.length);
+        setOrders(filteredOrders);
+      } else {
+        // For manufacturer-side invoice creation, load manufacturer orders
+        console.log('InvoiceCreator: Loading manufacturer orders');
+        response = await api.get(`/management/manufacturer/orders/?business=${businessId}`);
+        allOrders = response.data.results || response.data || [];
+        console.log('InvoiceCreator: Loaded manufacturer orders:', allOrders.length);
+        setOrders(allOrders);
+      }
     } catch (error) {
       console.error('Error loading orders:', error);
       toast.error('Failed to load orders');
+      setOrders([]);
     }
   };
 
@@ -268,14 +320,17 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
       return preciseMoneyCalculation(sum + itemAmount);
     }, 0);
     
-    const tax = preciseMoneyCalculation(formData.sales_tax || 0);
+    // Calculate sales tax based on rate
+    const taxRate = formData.sales_tax_rate || 0;
+    const tax = preciseMoneyCalculation((subtotal * taxRate) / 100);
     const grossTotal = preciseMoneyCalculation(subtotal + tax);
     const advanced = preciseMoneyCalculation(formData.advanced_paid || 0);
     const balanceDue = Math.max(0, preciseMoneyCalculation(grossTotal - advanced));
 
-    setFormData(prev => ({
-      ...prev,
+      setFormData(prev => ({
+        ...prev,
       subtotal: subtotal,
+      sales_tax: tax,
       gross_total: grossTotal,
       balance_due: balanceDue
     }));
@@ -325,7 +380,7 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
         customerName: customerName,
         orderData: order.data
       });
-      
+
       return {
         name: customerName,
         id: order.customer?.id
@@ -385,10 +440,12 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
           const quantity = order.data?.quantity || 1;
           
           console.log(`Order ${index + 1} - Product: ${product}, Quantity: ${quantity}`);
+          console.log(`Order ${index + 1} - Raw quantity value:`, order.data?.quantity);
+          console.log(`Order ${index + 1} - Quantity type:`, typeof order.data?.quantity);
           
           return {
             id: index + 1,
-            quantity: quantity,
+            quantity: parseFloat(quantity) || 1, // Ensure quantity is a number
             description: product,
             unit_price: 0, // Will need to be set by user
             amount: 0, // Will be calculated
@@ -401,7 +458,7 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
         // Update form data with auto-populated values
         setFormData(prev => {
           const updated = {
-            ...prev,
+      ...prev,
             customer_name: customerName,
             line_items: lineItems
           };
@@ -456,33 +513,157 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
       return;
     }
 
-    setIsSubmitting(true);
+    // Check if line items have valid quantities and prices
+    const invalidQuantities = formData.line_items.filter(item => 
+      !item.quantity || parseFloat(item.quantity) <= 0
+    );
     
-    try {
-      // Prepare invoice data
-      const invoiceData = {
-          ...formData,
-          business: businessId,
-          amount: formData.gross_total, // Use gross total as main amount
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-        related_orders: selectedOrders.map(order => order.id)
-      };
+    if (invalidQuantities.length > 0) {
+      toast.error('All line items must have valid quantities greater than 0');
+      return;
+    }
 
-      // Use enhanced invoice API
-      console.log('🔄 InvoiceCreator: About to create invoice with data:', invoiceData);
-      const response = await api.post('/management/enhanced-invoices/', invoiceData);
+    const invalidPrices = formData.line_items.filter(item => 
+      !item.unit_price || parseFloat(item.unit_price) < 0
+    );
+    
+    if (invalidPrices.length > 0) {
+      toast.error('All line items must have valid unit prices');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+            // Prepare invoice data with proper field mapping
+      const { sales_tax_rate, sales_tax, gross_total, ...restFormData } = formData;
+      
+      // Ensure all tax fields are proper numbers, not null/undefined
+      const taxPercentage = parseFloat(sales_tax_rate) || 0;
+      const taxAmount = parseFloat(sales_tax) || 0;
+      const totalAmount = parseFloat(gross_total) || 0;
+      
+      // Base invoice data for both endpoints
+      const baseInvoiceData = {
+          ...restFormData,
+          business: businessId,
+          // Map frontend fields to backend fields with guaranteed numeric values
+          tax_percentage: taxPercentage,
+          tax_amount: taxAmount,
+          total_amount: totalAmount,
+          amount: totalAmount, // Use total amount as main amount
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+          related_orders: selectedOrders.map(order => order.id)
+      };
+      
+      // Transform line_items to items format for both endpoints
+      const transformedItems = formData.line_items.map(item => ({
+        product_name: item.description || 'Product',
+        description: item.description || 'Product',
+        quantity: parseInt(item.quantity) || 1,
+        unit_price: parseFloat(item.unit_price) || 0
+      }));
+      
+      // Prepare endpoint-specific data
+      let invoiceData;
+      if (selectedEndCustomer) {
+        // Only include fields expected by InvoiceCreateSerializer
+        invoiceData = {
+          business: businessId,
+          invoice_type: 'customer',
+          status: 'draft',
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          items: transformedItems,
+          // Map to the correct fields expected by InvoiceCreateSerializer
+          recipient_id: selectedEndCustomer?.id || null,
+          recipient_name: formData.customer_name,
+          subtotal: parseFloat(formData.subtotal) || 0,
+          tax_percentage: parseFloat(formData.sales_tax_rate) || 0,
+          notes: formData.notes || formData.payment_instructions || ''
+        };
+        
+        console.log('🔄 InvoiceCreator: Transformed items for regular endpoint:', transformedItems);
+        console.log('🔄 InvoiceCreator: Invoice data for regular endpoint:', invoiceData);
+      } else {
+        // For enhanced invoice endpoint, use the enhanced format
+        invoiceData = baseInvoiceData;
+      }
+
+      // Debug: Check if businessId is valid
+      console.log('🔄 InvoiceCreator: businessId value:', businessId);
+      console.log('🔄 InvoiceCreator: businessId type:', typeof businessId);
+      if (!businessId) {
+        throw new Error('businessId is required but not provided');
+      }
+
+      // Use different endpoints for customer vs manufacturer invoice creation
+      let response;
+      if (selectedEndCustomer) {
+        // For customer-side invoice creation, use regular invoice endpoint (allows customers)
+        console.log('🔄 InvoiceCreator: Creating customer invoice with data:', invoiceData);
+        console.log('🔄 InvoiceCreator: Using regular invoice endpoint for customer');
+        console.log('🔄 InvoiceCreator: Request URL:', '/management/invoices/');
+        console.log('🔄 InvoiceCreator: Request method:', 'POST');
+        console.log('🔄 InvoiceCreator: Request headers:', api.defaults.headers);
+        console.log('🔄 InvoiceCreator: Transformed items:', transformedItems);
+        console.log('🔄 InvoiceCreator: Selected end customer:', selectedEndCustomer);
+        response = await api.post('/management/invoices/', invoiceData);
+      } else {
+        // For manufacturer-side invoice creation, use enhanced invoice endpoint
+        console.log('🔄 InvoiceCreator: Creating manufacturer invoice with data:', invoiceData);
+        console.log('🔄 InvoiceCreator: Using enhanced invoice endpoint');
+        response = await api.post('/management/enhanced-invoices/', invoiceData);
+      }
       console.log('🔄 InvoiceCreator: Invoice creation response:', response);
-      console.log('🔄 InvoiceCreator: Invoice data from response:', response.data.invoice);
+      
+      // Handle different response formats
+      let responseInvoiceData;
+      if (selectedEndCustomer) {
+        // Regular invoice endpoint returns the invoice directly
+        responseInvoiceData = response.data;
+        console.log('🔄 InvoiceCreator: Invoice data from regular endpoint:', responseInvoiceData);
+      } else {
+        // Enhanced invoice endpoint returns {invoice: {...}}
+        responseInvoiceData = response.data.invoice;
+        console.log('🔄 InvoiceCreator: Invoice data from enhanced endpoint:', responseInvoiceData);
+      }
 
       toast.success(editInvoice ? 'Invoice updated successfully!' : 'Invoice created successfully!');
-      console.log('🔄 InvoiceCreator: Calling onCreated with invoice data...');
-      onCreated(response.data.invoice);
-      console.log('🔄 InvoiceCreator: onCreated callback completed');
+      console.log('🔄 InvoiceCreator: Calling onSave with invoice data...');
+      console.log('🔄 InvoiceCreator: Response invoice data:', responseInvoiceData);
+      onSave(responseInvoiceData);
+      console.log('🔄 InvoiceCreator: onSave callback completed');
       onClose();
       
     } catch (error) {
       console.error('Error saving invoice:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || 'Failed to save invoice';
+      
+      // Provide more detailed error messages
+      let errorMessage = 'Failed to save invoice';
+      
+      if (error.response?.status === 400) {
+        // Bad request - show validation errors
+        if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error;
+        } else if (typeof error.response.data === 'object') {
+          // Show first validation error
+          const firstError = Object.values(error.response.data)[0];
+          if (Array.isArray(firstError)) {
+            errorMessage = firstError[0];
+          } else if (typeof firstError === 'string') {
+            errorMessage = firstError;
+          }
+        }
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to create invoices.';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Server error. Please try again later.';
+      }
+      
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -494,8 +675,8 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
     console.log(`handleInputChange - field: ${field}, value: ${value}`);
     setFormData(prev => ({ ...prev, [field]: value }));
     
-    // Recalculate totals if tax or advanced paid changes
-    if (field === 'sales_tax' || field === 'advanced_paid') {
+    // Recalculate totals if tax rate, tax amount, or advanced paid changes
+    if (field === 'sales_tax_rate' || field === 'sales_tax' || field === 'advanced_paid') {
       calculateTotals();
     }
   };
@@ -518,53 +699,71 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
-            <FileText className="w-6 h-6 text-blue-600" />
+              <FileText className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {editInvoice ? 'Edit Invoice' : 'Create New Invoice'}
-            </h2>
-              <p className="text-xs text-gray-600">
-                {activeStep === 1 ? 'Select orders to invoice' : 'Configure invoice details'}
-              </p>
+              <h3 className="text-xl font-semibold text-gray-900">
+                {editInvoice ? 'Edit Invoice' : 'Create Invoice'}
+              </h3>
+              {editInvoice ? (
+                <p className="text-sm text-gray-600">
+                  Editing invoice #{editInvoice.invoice_number} - Orders are read-only
+                </p>
+              ) : selectedEndCustomer ? (
+                <p className="text-sm text-gray-600">
+                  Creating sales invoice for: <span className="font-medium text-blue-600">{selectedEndCustomer.name}</span>
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Create invoice from manufacturer orders
+                </p>
+              )}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Progress Steps */}
-        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center space-x-4">
-            <div className={`flex items-center space-x-2 ${activeStep >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                activeStep >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-              }`}>
-                1
-              </div>
-              <span className="text-sm font-medium">Select Orders</span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-gray-400" />
+            {!editInvoice && (
+              <>
+                <div className={`flex items-center space-x-2 ${activeStep >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    activeStep >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    1
+                  </div>
+                  <span className="text-sm font-medium">
+                    {selectedEndCustomer ? 'Select Customer Orders' : 'Select Orders'}
+                  </span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-400" />
+              </>
+            )}
             <div className={`flex items-center space-x-2 ${activeStep >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 activeStep >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
               }`}>
-                2
+                {editInvoice ? '1' : '2'}
               </div>
               <span className="text-sm font-medium">Invoice Details</span>
             </div>
@@ -573,7 +772,7 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 activeStep >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
               }`}>
-                3
+                {editInvoice ? '2' : '3'}
               </div>
               <span className="text-sm font-medium">Line Items</span>
             </div>
@@ -581,8 +780,8 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
         </div>
 
         {/* Content */}
-        <div>
-          {activeStep === 1 && (
+        <div className="flex-1 overflow-y-auto">
+          {activeStep === 1 && !editInvoice && (
             <OrderSelectionStep
               orders={availableOrders}
               selectedOrders={selectedOrders}
@@ -593,6 +792,8 @@ const InvoiceCreator = ({ businessId, onClose, onCreated, editInvoice = null, se
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               editInvoice={editInvoice}
+              selectedEndCustomer={selectedEndCustomer}
+              onClose={onClose}
             />
           )}
 
@@ -641,7 +842,9 @@ const OrderSelectionStep = ({
   onGenerateInvoice,
   searchQuery,
   onSearchChange,
-  editInvoice
+  editInvoice,
+  selectedEndCustomer,
+  onClose
 }) => {
   return (
     <div className="p-4 space-y-3">
@@ -654,7 +857,9 @@ const OrderSelectionStep = ({
           <p className="text-sm text-gray-600">
             {editInvoice 
               ? 'Orders included in this invoice (read-only)'
-              : 'Choose completed, shipped, or delivered orders to include in this invoice'
+              : selectedEndCustomer 
+                ? `Choose completed, shipped, or delivered orders for ${selectedEndCustomer.name}`
+                : 'Choose completed, shipped, or delivered orders to include in this invoice'
             }
           </p>
         </div>
@@ -681,10 +886,13 @@ const OrderSelectionStep = ({
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
         <input
           type="text"
-          placeholder="Search orders by number, customer, or product..."
+          placeholder={editInvoice ? "Orders included in this invoice (read-only)" : "Search orders by number, customer, or product..."}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          disabled={editInvoice}
+          className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+            editInvoice ? 'bg-gray-100 cursor-not-allowed' : ''
+          }`}
         />
       </div>
 
@@ -702,11 +910,19 @@ const OrderSelectionStep = ({
                 {selectedOrders.length} order{selectedOrders.length !== 1 ? 's' : ''} selected
               </span>
             </div>
-            <div className="text-sm text-blue-700">
-              Total: {formatCurrency(selectedOrders.reduce((sum, order) => {
-                const amount = order.data?.amount || order.data?.total || order.amount || 0;
-                return sum + (parseFloat(amount) || 0);
-              }, 0))}
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-blue-700">
+                Total Qty: {selectedOrders.reduce((sum, order) => {
+                  const quantity = order.data?.quantity || 1;
+                  return sum + (parseFloat(quantity) || 1);
+                }, 0)}
+              </div>
+              <div className="text-sm text-blue-700">
+                Total: {formatCurrency(selectedOrders.reduce((sum, order) => {
+                  const amount = order.data?.amount || order.data?.total || order.amount || 0;
+                  return sum + (parseFloat(amount) || 0);
+                }, 0))}
+              </div>
             </div>
           </div>
         </motion.div>
@@ -715,13 +931,16 @@ const OrderSelectionStep = ({
       {/* Orders List */}
       <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
         {orders.length === 0 ? (
-                        <div className="text-center py-6">
-                <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                <h3 className="text-base font-medium text-gray-900 mb-1">No orders available</h3>
-                <p className="text-sm text-gray-500">
-                  Only completed, shipped, or delivered orders can be invoiced
-                </p>
-              </div>
+          <div className="text-center py-6">
+            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <h3 className="text-base font-medium text-gray-900 mb-1">No orders available</h3>
+            <p className="text-sm text-gray-500">
+              {selectedEndCustomer 
+                ? `No completed, shipped, or delivered orders found for ${selectedEndCustomer.name}. Orders must be in a completed state to be invoiced.`
+                : 'Only completed, shipped, or delivered orders can be invoiced'
+              }
+            </p>
+          </div>
         ) : (
           orders.map((order) => {
             const isSelected = selectedOrders.find(o => o.id === order.id);
@@ -734,7 +953,7 @@ const OrderSelectionStep = ({
                   isSelected 
                     ? 'border-blue-500 bg-blue-50' 
                     : 'border-gray-200'
-                } ${!editInvoice ? 'cursor-pointer hover:border-gray-300 hover:bg-gray-50' : ''}`}
+                } ${!editInvoice ? 'cursor-pointer hover:border-gray-300 hover:bg-gray-50' : 'cursor-default'}`}
                 onClick={!editInvoice ? () => onToggleOrder(order) : undefined}
               >
                 <div className="flex items-center space-x-4">
@@ -742,38 +961,33 @@ const OrderSelectionStep = ({
                     isSelected 
                       ? 'border-blue-500 bg-blue-500' 
                       : 'border-gray-300'
-                  }`}>
+                  } ${editInvoice ? 'opacity-50' : ''}`}>
                     {isSelected && <Check className="w-3 h-3 text-white" />}
                   </div>
-                  
+
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <h4 className="font-medium text-gray-900">
                         Order #{order.order_number}
                       </h4>
-                    </div>
-                    <div className="flex items-center space-x-3 mt-1 text-sm text-gray-600">
-                      <span className="flex items-center">
-                        <User className="w-4 h-4 mr-1" />
-                        {order.customer?.username || order.customer_name}
-                      </span>
-                      <span className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.status === 'completed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-purple-100 text-purple-800'
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                        order.status === 'delivered' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
                       }`}>
-                        {order.status === 'completed' ? 'Completed' : 'Shipped'}
+                        {order.status}
                       </span>
                     </div>
-                    {order.data?.product_name && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {order.data.product_name}
-                      </p>
-                    )}
+                    <div className="text-sm text-gray-500 mt-1">
+                      <span className="font-medium">{order.data?.product || 'Product'}</span>
+                      <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                        Qty: {order.data?.quantity || 1}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Customer: {order.data?.customer || order.customer_name || order.customer?.username || 'Unknown'}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -783,39 +997,20 @@ const OrderSelectionStep = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center justify-end space-x-3 pt-3 border-t border-gray-200">
-        {!editInvoice ? (
-          <>
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                console.log('Generate Invoice button clicked!');
-                console.log('Selected orders:', selectedOrders);
-                onGenerateInvoice();
-              }}
-              disabled={selectedOrders.length === 0}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-            >
-              <ArrowRight className="w-4 h-4" />
-              <span>Next: Invoice Details ({selectedOrders.length})</span>
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => window.history.back()}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Back
-          </button>
-        )}
+      <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onGenerateInvoice}
+          disabled={selectedOrders.length === 0}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          {editInvoice ? 'Continue to Invoice Details' : selectedEndCustomer ? 'Continue to Invoice Details' : 'Generate Invoice'}
+        </button>
       </div>
     </div>
   );
@@ -872,12 +1067,19 @@ const InvoiceDetailsStep = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Invoice Details</h3>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {editInvoice ? 'Edit Invoice Details' : 'Invoice Details'}
+          </h3>
           <p className="text-sm text-gray-600">
-            Configure invoice information and line items
+            {editInvoice 
+              ? 'Review and modify invoice information (orders are read-only)'
+              : selectedOrders.length > 0
+                ? 'Configure invoice information and line items'
+                : 'Configure sales invoice information and line items'
+            }
           </p>
         </div>
-        {!editInvoice && (
+        {!editInvoice && selectedOrders.length > 0 && (
           <button
             type="button"
             onClick={onBack}
@@ -890,18 +1092,46 @@ const InvoiceDetailsStep = ({
 
       {/* Order Summary (for edit mode) */}
       {editInvoice && selectedOrders.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center space-x-2 mb-3">
-            <Package className="w-5 h-5 text-blue-600" />
-            <h4 className="font-medium text-blue-900">Selected Orders (Read-only)</h4>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2 mb-4">
+            <Package className="w-5 h-5 text-gray-600" />
+            <h4 className="font-medium text-gray-900">Invoice Orders (Read-only)</h4>
+            <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
+              {selectedOrders.length} order{selectedOrders.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {selectedOrders.map((order) => (
-              <div key={order.id} className="flex items-center justify-between text-sm">
-                <span className="text-blue-800">#{order.order_number}</span>
-                <span className="text-blue-600">
-                  {order.customer?.username || order.data?.customer || 'Unknown Customer'}
-                </span>
+              <div key={order.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium text-gray-900">#{order.order_number}</span>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                      order.status === 'delivered' ? 'bg-purple-100 text-purple-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {order.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>
+                    <span className="font-medium">Customer:</span> {order.data?.customer || order.customer?.username || order.customer_name || 'Unknown'}
+                  </div>
+                  <div>
+                    <span className="font-medium">Product:</span> {order.data?.product || 'Product'}
+                  </div>
+                  <div>
+                    <span className="font-medium">Quantity:</span> {order.data?.quantity || 1}
+                  </div>
+                  {order.data?.amount && (
+                    <div>
+                      <span className="font-medium">Amount:</span> {formatCurrency(order.data.amount)}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -910,29 +1140,29 @@ const InvoiceDetailsStep = ({
 
           {/* Invoice Metadata Section */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                 Invoice Date
-              </label>
-              <input
+                </label>
+                <input
                 type="date"
                 value={formData.invoice_date}
             onChange={(e) => onInputChange('invoice_date', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
+              </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                 PO Number (Optional)
-              </label>
+                </label>
               <textarea
                 value={formData.po_number}
             onChange={(e) => onInputChange('po_number', e.target.value)}
                 placeholder="Enter purchase order number(s)"
                 rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+                />
+              </div>
           </div>
 
           {/* Customer Information Section */}
@@ -1005,12 +1235,41 @@ const InvoiceDetailsStep = ({
 
 
 
-          {/* Footer/Notes Section */}
+          {/* Tax Settings Section */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <FileText className="w-5 h-5 mr-2" />
-              Additional Information
+              <Calculator className="w-5 h-5 mr-2" />
+              Tax Settings
             </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sales Tax Rate (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.sales_tax_rate === 0 ? '' : formData.sales_tax_rate}
+                  onChange={(e) => {
+                    const rate = parseFloat(e.target.value) || 0;
+                    onInputChange('sales_tax_rate', rate);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer/Notes Section */}
+          <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <FileText className="w-5 h-5 mr-2" />
+              Additional Information
+              </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1071,8 +1330,8 @@ const InvoiceDetailsStep = ({
             >
               <ArrowRight className="w-4 h-4 mr-2" />
               Next: Line Items
-            </button>
-          </div>
+              </button>
+            </div>
         </div>
   );
 };
@@ -1161,7 +1420,7 @@ const LineItemsStep = ({
           <p className="text-sm text-gray-600">
             Configure order items and pricing
           </p>
-        </div>
+              </div>
         <button
           type="button"
           onClick={onBack}
@@ -1172,7 +1431,7 @@ const LineItemsStep = ({
           </div>
 
           {/* Line Items Section */}
-          <div className="space-y-4">
+              <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                 <Calculator className="w-5 h-5 mr-2" />
@@ -1186,8 +1445,8 @@ const LineItemsStep = ({
                 <Plus className="w-4 h-4 mr-2" />
                 Add Item
               </button>
-            </div>
-
+                      </div>
+                      
         <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
               {formData.line_items.map((item, index) => (
                 <motion.div
@@ -1199,10 +1458,10 @@ const LineItemsStep = ({
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Quantity
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
                       value={item.quantity}
                   onChange={(e) => onUpdateLineItem(index, 'quantity', e.target.value)}
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -1221,49 +1480,60 @@ const LineItemsStep = ({
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                 {item.order_reference && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Order: {item.order_reference}
-                  </p>
-                )}
+                  <div className="text-xs text-gray-500 mt-1 space-y-1">
+                    <p>Order: {item.order_reference}</p>
+                    {selectedOrders.find(order => 
+                      order.order_number === item.order_reference || 
+                      `Order ${order.id}` === item.order_reference
+                    ) && (
+                      <p className="text-blue-600 font-medium">
+                        Original Qty: {selectedOrders.find(order => 
+                          order.order_number === item.order_reference || 
+                          `Order ${order.id}` === item.order_reference
+                        )?.data?.quantity || 1}
+                      </p>
+                    )}
                   </div>
-                  
+                )}
+                      </div>
+                      
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Unit Price
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
                       min="0"
                       value={item.unit_price}
                   onChange={(e) => onUpdateLineItem(index, 'unit_price', e.target.value)}
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                  </div>
-                  
+                      </div>
+                      
               <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Amount
-                    </label>
+                        </label>
                     <div className="px-2 py-1 text-sm bg-white border border-gray-300 rounded text-right font-medium">
                       {formatCurrency(item.amount)}
-                    </div>
-                  </div>
-                  
+                        </div>
+                      </div>
+                      
                   <div className="col-span-1 flex items-end">
                     {formData.line_items.length > 1 && (
-                      <button
-                        type="button"
+                        <button
+                          type="button"
                     onClick={() => onRemoveLineItem(index)}
                         className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                     )}
-                  </div>
+                      </div>
                 </motion.div>
-              ))}
-            </div>
+                ))}
+              </div>
           </div>
 
           {/* Totals Section */}
@@ -1280,26 +1550,14 @@ const LineItemsStep = ({
                   <span className="font-medium">{formatCurrency(formData.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Sales Tax:</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.sales_tax === 0 ? '' : formData.sales_tax}
-                    onChange={(e) => {
-                      const value = preciseMoneyCalculation(e.target.value);
-                      onFormDataChange({ ...formData, sales_tax: value });
-                      onCalculateTotals();
-                    }}
-                    className="w-24 px-2 py-1 text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="0"
-                  />
+                  <span className="text-gray-600">Sales Tax ({formData.sales_tax_rate}%):</span>
+                  <span className="font-medium">{formatCurrency(formData.sales_tax)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold border-t pt-2">
                   <span>Gross Total:</span>
                   <span>{formatCurrency(formData.gross_total)}</span>
+                  </div>
                 </div>
-              </div>
               
               <div className="space-y-3">
                 <div className="flex justify-between">
@@ -1317,14 +1575,14 @@ const LineItemsStep = ({
                     className="w-24 px-2 py-1 text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     placeholder="0"
                   />
-                </div>
+              </div>
                 <div className="flex justify-between text-lg font-semibold border-t pt-2">
                   <span>Balance Due:</span>
                   <span className={formData.balance_due > 0 ? 'text-red-600' : 'text-green-600'}>
                     {formatCurrency(formData.balance_due)}
                   </span>
-                </div>
-              </div>
+            </div>
+          </div>
             </div>
           </div>
 
@@ -1355,7 +1613,7 @@ const LineItemsStep = ({
                 </>
               )}
             </button>
-          </div>
+      </div>
     </div>
   );
 };

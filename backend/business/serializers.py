@@ -6,7 +6,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Business
-        fields = ['id', 'name', 'slogan', 'shipping_country', 'invite_code', 'status']
+        fields = ['id', 'name', 'slogan', 'invite_code', 'status']
         read_only_fields = ['invite_code', 'status']
     
     def get_status(self, obj):

@@ -40,7 +40,7 @@ const PaymentManagement = ({ businessId, colors = {
     setLoading(true);
     try {
       // Fetch invoices - backend automatically filters out draft invoices for customers
-      const response = await api.get(`/management/invoices/?business=${businessId}&invoice_type=manufacturer_to_customer`);
+      const response = await api.get(`/management/invoices/?business=${businessId}&invoice_type=manufacturer`);
       setInvoices(response.data.results || response.data || []);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -154,19 +154,17 @@ const PaymentManagement = ({ businessId, colors = {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Invoice Management</h1>
-              <p className="text-gray-600">Manage your invoices and payments</p>
+              {/* Show "New Payment" button for manufacturers */}
+              {userRole === 'manufacturer' && (
+                <button
+                  onClick={handleCreateInvoice}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors flex items-center gap-2 shadow-lg"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Payment
+                </button>
+              )}
             </div>
-            {/* Show "New Payment" button for manufacturers */}
-            {userRole === 'manufacturer' && (
-              <button
-                onClick={handleCreateInvoice}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors flex items-center gap-2 shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                New Payment
-              </button>
-            )}
           </div>
         </div>
 
@@ -314,9 +312,21 @@ const PaymentManagement = ({ businessId, colors = {
       {/* Enhanced Invoice Creator Modal */}
       {showCreateInvoiceModal && (
         <InvoiceCreator
+          isOpen={showCreateInvoiceModal}
           businessId={businessId}
+          invoiceType="customer"
           onClose={() => setShowCreateInvoiceModal(false)}
-          onCreated={handleInvoiceCreated}
+          onSave={async (invoiceData) => {
+            try {
+              const response = await api.post('/management/invoices/', invoiceData);
+              handleInvoiceCreated(response.data);
+              setShowCreateInvoiceModal(false);
+              toast.success('Invoice created successfully!');
+            } catch (error) {
+              console.error('Error creating invoice:', error);
+              toast.error('Failed to create invoice');
+            }
+          }}
         />
       )}
 

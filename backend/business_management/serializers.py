@@ -18,8 +18,14 @@ from .models import (
 
     Business,
     Invoice,
+    InvoiceItem,
+    EndCustomer,
     NumberConfig,
     OrderStatusHistory,
+    Proposal,
+    ProposalResponse,
+    ChatRoom,
+    ChatMessage,
 )
 from django.utils.text import slugify
 
@@ -373,11 +379,12 @@ class OrderSerializer(serializers.ModelSerializer):
     customer_email = serializers.CharField(source='customer.email', read_only=True)
     customer_first_name = serializers.CharField(source='customer.first_name', read_only=True)
     business_id = serializers.IntegerField(source='business.id', read_only=True)
+    business_name = serializers.CharField(source='business.name', read_only=True)
     status_history = OrderStatusHistorySerializer(many=True, read_only=True)
     
     class Meta:
         model = Order
-        fields = ['id', 'order_number', 'template_type', 'data', 'status', 'order_type', 'created_at', 'business', 'business_id', 'customer_name', 'customer_email', 'customer_first_name', 'status_history']
+        fields = ['id', 'order_number', 'template_type', 'data', 'status', 'order_type', 'created_at', 'business', 'business_id', 'business_name', 'customer_name', 'customer_email', 'customer_first_name', 'status_history']
         read_only_fields = ['status', 'created_at']
 
     def create(self, validated_data):
@@ -400,7 +407,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     class Meta:
         model = Business
         fields = [
-            'id', 'name', 'slogan', 'shipping_country', 'invite_code', 'owner', 'manufacturer', 'status'
+            'id', 'name', 'slogan', 'invite_code', 'owner', 'manufacturer', 'status', 'is_public'
         ]
         read_only_fields = ['id', 'invite_code', 'owner', 'manufacturer', 'status']
     
@@ -440,6 +447,45 @@ class BusinessSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
+# END CUSTOMER SERIALIZERS
+# =============================================================================
+
+class EndCustomerSerializer(serializers.ModelSerializer):
+    """
+    End Customer Serializer
+    ----------------------
+    Handles serialization of end customers for sales invoices.
+    """
+    class Meta:
+        model = EndCustomer
+        fields = ['id', 'name', 'contact_person', 'email', 'phone', 'address', 'business', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+    def create(self, validated_data):
+        # Set the business from the request user only if not provided in data
+        request = self.context.get('request')
+        if 'business' not in validated_data and request and hasattr(request.user, 'business'):
+            validated_data['business'] = request.user.business
+        return super().create(validated_data)
+
+
+# =============================================================================
+# INVOICE ITEM SERIALIZERS
+# =============================================================================
+
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    """
+    Invoice Item Serializer
+    ----------------------
+    Handles serialization of individual invoice items.
+    """
+    class Meta:
+        model = InvoiceItem
+        fields = ['id', 'invoice', 'product_name', 'description', 'quantity', 'unit_price', 'total_price', 'created_at']
+        read_only_fields = ['total_price', 'created_at', 'invoice']  # Make invoice read-only for nested creation
+
+
+# =============================================================================
 # INVOICE SERIALIZERS
 # =============================================================================
 
@@ -448,18 +494,21 @@ class InvoiceSerializer(serializers.ModelSerializer):
     Invoice Serializer
     ------------------
     Handles invoice serialization with order and business information.
-    Supports enhanced invoice data including multiple orders and line items.
+    Supports both manufacturer and customer invoices.
     """
-    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    order_number = serializers.CharField(source='order.order_number', read_only=True, allow_null=True)
     customer_name = serializers.CharField(required=False, allow_blank=True)
     business_name = serializers.CharField(source='business.name', read_only=True)
     related_orders_display = serializers.CharField(source='get_related_orders_display', read_only=True)
     total_orders = serializers.IntegerField(source='get_total_orders', read_only=True)
+    recipient_name_display = serializers.CharField(source='recipient_name', read_only=True)
+    items = InvoiceItemSerializer(many=True, read_only=True)
     
     # Custom decimal fields to ensure proper formatting
     subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
-    sales_tax = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
-    gross_total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    tax_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, coerce_to_string=True)
+    tax_amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    total_amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
     advanced_paid = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
@@ -467,13 +516,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'business', 'invoice_number', 'invoice_type', 
+            'id', 'business', 'invoice_number', 'invoice_type', 'created_by',
+            'recipient_id', 'recipient_name', 'recipient_name_display',
             'order', 'related_orders', 'related_orders_display', 'total_orders',
             'customer_name', 'bill_to', 'contact_info', 'po_number', 'invoice_date',
             'amount', 'due_date', 'status', 'notes', 'created_at', 'updated_at', 
-            'order_number', 'business_name',
+            'order_number', 'business_name', 'items',
             # Enhanced fields
-            'line_items', 'subtotal', 'sales_tax', 'gross_total', 
+            'line_items', 'subtotal', 'tax_percentage', 'tax_amount', 'total_amount', 
             'advanced_paid', 'balance_due',
             'payment_instructions', 'contact_for_questions', 'thank_you_message'
         ]
@@ -497,8 +547,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """Validate invoice data and ensure proper decimal handling"""
+        # Validate recipient_id based on invoice_type
+        invoice_type = data.get('invoice_type')
+        recipient_id = data.get('recipient_id')
+        
+        if invoice_type == 'customer' and recipient_id:
+            # For customer invoices, recipient_id should be an EndCustomer id
+            from .models import EndCustomer
+            if not EndCustomer.objects.filter(id=recipient_id, business=data.get('business')).exists():
+                raise serializers.ValidationError("Invalid end customer selected")
+        elif invoice_type == 'manufacturer' and recipient_id:
+            # For manufacturer invoices, recipient_id should be a manufacturer id
+            # Add your manufacturer validation logic here if needed
+            pass
+        
         # Ensure all decimal fields are properly formatted
-        decimal_fields = ['subtotal', 'sales_tax', 'gross_total', 'advanced_paid', 'balance_due', 'amount']
+        decimal_fields = ['subtotal', 'tax_percentage', 'tax_amount', 'total_amount', 'advanced_paid', 'balance_due', 'amount']
         
         for field in decimal_fields:
             if field in data:
@@ -524,6 +588,37 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return invoice
 
 
+class InvoiceCreateSerializer(serializers.ModelSerializer):
+    """
+    Invoice Create Serializer
+    ------------------------
+    Handles invoice creation with items.
+    """
+    items = InvoiceItemSerializer(many=True)
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'invoice_number', 'invoice_type', 'business', 'created_by',
+            'recipient_id', 'recipient_name', 'subtotal', 'tax_percentage',
+            'status', 'due_date', 'notes', 'items'
+        ]
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        invoice = Invoice.objects.create(**validated_data)
+        
+        # Create invoice items
+        for item_data in items_data:
+            InvoiceItem.objects.create(invoice=invoice, **item_data)
+        
+        # Recalculate totals from invoice items
+        invoice.recalculate_totals_from_items()
+        invoice.save()
+        
+        return invoice
+
+
 # =============================================================================
 # NUMBER CONFIGURATION SERIALIZERS
 # =============================================================================
@@ -540,18 +635,127 @@ class NumberConfigSerializer(serializers.ModelSerializer):
             'id', 'business', 'config_type', 'start_number', 
             'current_number', 'prefix', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'business']  # Removed 'config_type' from read-only
 
     def validate(self, data):
         """Allow setting current_number to any value"""
         # Allow any current_number value - remove restrictive validation
         # This allows resetting the numbering sequence
-        print(f"NumberConfigSerializer validate - data: {data}")
         return data
 
-    def update(self, instance, validated_data):
-        """Add debugging to update method"""
-        print(f"NumberConfigSerializer update - instance: {instance}, validated_data: {validated_data}")
-        result = super().update(instance, validated_data)
-        print(f"NumberConfigSerializer update - result: {result}")
-        return result
+
+class ProposalSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
+    business_name = serializers.CharField(source='business.name', read_only=True)
+    responses_count = serializers.IntegerField(read_only=True)
+    accepted_responses_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Proposal
+        fields = [
+            'id', 'customer', 'customer_name', 'business', 'business_name',
+            'title', 'description', 'category', 'quantity_needed', 'budget_range',
+            'deadline', 'is_active', 'created_at', 'updated_at',
+            'responses_count', 'accepted_responses_count'
+        ]
+        read_only_fields = ['customer', 'created_at', 'updated_at']
+
+
+class ProposalResponseSerializer(serializers.ModelSerializer):
+    manufacturer_name = serializers.CharField(source='manufacturer.get_full_name', read_only=True)
+    manufacturer_email = serializers.CharField(source='manufacturer.email', read_only=True)
+    manufacturer_company = serializers.CharField(source='manufacturer.company_name', read_only=True)
+    manufacturer_location = serializers.CharField(source='manufacturer.location', read_only=True)
+    proposal_title = serializers.CharField(source='proposal.title', read_only=True)
+    business_name = serializers.CharField(source='proposal.business.name', read_only=True)
+
+    class Meta:
+        model = ProposalResponse
+        fields = [
+            'id', 'proposal', 'proposal_title', 'business_name',
+            'manufacturer', 'manufacturer_name', 'manufacturer_email',
+            'manufacturer_company', 'manufacturer_location',
+            'message', 'price_quote', 'delivery_time', 'status', 'created_at'
+        ]
+        read_only_fields = ['manufacturer', 'created_at']
+
+
+# =============================================================================
+# CHAT SERIALIZERS
+# =============================================================================
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    """
+    Chat Message Serializer
+    -----------------------
+    Handles serialization of individual chat messages.
+    """
+    sender_name = serializers.CharField(source='sender.get_full_name', read_only=True)
+    sender_email = serializers.CharField(source='sender.email', read_only=True)
+    
+    class Meta:
+        model = ChatMessage
+        fields = [
+            'id', 'chat_room', 'sender', 'sender_name', 'sender_email',
+            'message', 'created_at', 'is_read'
+        ]
+        read_only_fields = ['sender', 'created_at', 'is_read']
+
+
+class ChatRoomSerializer(serializers.ModelSerializer):
+    """
+    Chat Room Serializer
+    --------------------
+    Handles serialization of chat rooms with related data.
+    """
+    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
+    manufacturer_name = serializers.CharField(source='manufacturer.get_full_name', read_only=True)
+    request_title = serializers.CharField(source='request.business.name', read_only=True)
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ChatRoom
+        fields = [
+            'id', 'customer', 'customer_name', 'manufacturer', 'manufacturer_name',
+            'request', 'request_title', 'created_at', 'is_active',
+            'last_message', 'unread_count'
+        ]
+        read_only_fields = ['created_at']
+    
+    def get_last_message(self, obj):
+        """Get the last message in the chat room"""
+        last_message = obj.messages.last()
+        if last_message:
+            return {
+                'id': last_message.id,
+                'message': last_message.message[:100] + '...' if len(last_message.message) > 100 else last_message.message,
+                'sender_name': last_message.sender.get_full_name(),
+                'created_at': last_message.created_at
+            }
+        return None
+    
+    def get_unread_count(self, obj):
+        """Get unread message count for the current user"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 0
+        
+        user = request.user
+        if user == obj.customer:
+            return obj.unread_count_customer
+        elif user == obj.manufacturer:
+            return obj.unread_count_manufacturer
+        return 0
+
+
+class ChatRoomDetailSerializer(ChatRoomSerializer):
+    """
+    Chat Room Detail Serializer
+    ---------------------------
+    Extended serializer for detailed chat room view with messages.
+    """
+    messages = ChatMessageSerializer(many=True, read_only=True)
+    
+    class Meta(ChatRoomSerializer.Meta):
+        fields = ChatRoomSerializer.Meta.fields + ['messages']

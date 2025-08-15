@@ -172,7 +172,7 @@ const OtpVerificationPage = () => {
     
     try {
       // Verify OTP with backend
-      await verifyOTP(email, enteredOTP);
+              await verifyOTP(email, enteredOTP);
       
       // Show success toast
       toast.success(

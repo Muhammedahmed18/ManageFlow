@@ -14,6 +14,8 @@ import {
     Users,
     ShieldCheck,
     FileText,
+    FileText as FileTextIcon,
+    User,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -24,7 +26,8 @@ const Sidebar = ({
     sidebarCollapsed,
     setSidebarCollapsed,
     colors,
-    business
+    business,
+    currentUser
 }) => {
     const { logout } = useAuth();
     const navigate = useNavigate();
@@ -54,8 +57,17 @@ const Sidebar = ({
             ]
         },
         { name: 'Orders', icon: ClipboardList, tab: 'orders' },
-        { name: 'Payments', icon: CreditCard, tab: 'payments'},
+        {
+            name: 'Payments',
+            icon: CreditCard,
+            tab: 'payments',
+            subItems: [
+                { name: 'Invoices', tab: 'payments' },
+                { name: 'Sales', tab: 'sales' }
+            ]
+        },
         { name: 'Manufacturers', icon: Users, tab: 'manufacturers'},
+        { name: 'Proposals', icon: FileTextIcon, tab: 'proposals'},
         { name: 'Settings', icon: Settings, tab: 'settings' },
     ];
 
@@ -249,26 +261,42 @@ const Sidebar = ({
                 </nav>
             </div>
 
-            {/* Logout Section */}
+            {/* User Section with Logout */}
             <div className="p-4 border-t border-gray-700/50">
-                <div
-                    onClick={handleLogout}
-                    onMouseEnter={() => setHoveredItem('logout')}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    className={`flex items-center p-3 text-sm font-medium rounded-lg cursor-pointer transition-colors duration-200 ${
-                        hoveredItem === 'logout' 
-                            ? 'bg-red-600 text-white' 
-                            : 'text-gray-300 hover:text-white hover:bg-red-500'
-                    }`}
-                >
-                    <LogOut size={20} className="mr-3 flex-shrink-0" />
-                    {!sidebarCollapsed && <span>Logout</span>}
-                    
-                    {sidebarCollapsed && hoveredItem === 'logout' && (
-                        <div className="absolute left-full top-0 ml-2 px-3 py-2 text-sm rounded-lg whitespace-nowrap z-50 shadow-lg bg-red-600 text-white">
-                            Logout
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                            <User size={16} className="text-white" />
                         </div>
-                    )}
+                        {!sidebarCollapsed && (
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-white truncate">
+                                    {currentUser?.first_name && currentUser?.last_name 
+                                      ? `${currentUser.first_name} ${currentUser.last_name}` 
+                                      : currentUser?.first_name || currentUser?.username || 'User'}
+                                </p>
+                                <p className="text-xs text-white opacity-70 truncate">
+                                    {currentUser?.email || 'user@example.com'}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Logout Icon */}
+                    <div
+                        onClick={handleLogout}
+                        onMouseEnter={() => setHoveredItem('logout')}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className="p-2 rounded-lg cursor-pointer transition-colors duration-200 hover:bg-red-500 flex-shrink-0 ml-2"
+                    >
+                        <LogOut size={16} className="text-white" />
+                        
+                        {sidebarCollapsed && hoveredItem === 'logout' && (
+                            <div className="absolute left-full top-0 ml-2 px-3 py-2 text-sm rounded-lg whitespace-nowrap z-50 shadow-lg bg-red-600 text-white">
+                                Logout
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

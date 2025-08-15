@@ -2,7 +2,8 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute = ({ allowedRoles }) => {
-  const { isAuthenticated, loading, role } = useAuth();
+  const { isAuthenticated, loading, getRole } = useAuth();
+  const role = getRole();
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
@@ -13,7 +14,6 @@ const ProtectedRoute = ({ allowedRoles }) => {
   }
 
   if (allowedRoles && !allowedRoles.includes(role)) {
-    // Optionally, redirect to a dashboard or unauthorized page
     return <Navigate to="/" />;
   }
 

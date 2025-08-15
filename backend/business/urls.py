@@ -1,6 +1,6 @@
 # business/urls.py
 from django.urls import path
-from .views import BusinessView, BusinessDetailView, CustomerBusinessDetail
+from .views import BusinessView, BusinessDetailView, CustomerBusinessDetail, CustomerBusinessVisibilityView
 from . import views
 
 urlpatterns = [
@@ -11,4 +11,6 @@ urlpatterns = [
     path('businesses/approve/', views.approve_manufacturer, name='approve_manufacturer'),
     path('businesses/reject/', views.reject_manufacturer, name='reject_manufacturer'),
     path('customer/business/<int:id>/', CustomerBusinessDetail.as_view()),
+    path('customer/businesses/visibility/', CustomerBusinessVisibilityView.as_view(), name='customer-business-visibility'),
+    path('customer/businesses/visibility/<int:business_id>/', CustomerBusinessVisibilityView.as_view(), name='customer-business-visibility-toggle'),
 ]

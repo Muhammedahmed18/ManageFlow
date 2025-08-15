@@ -135,11 +135,22 @@ const AccountDeletionModal = ({ isOpen, onClose, onSuccess, userType = 'user' })
                       Deleting your account will permanently remove all your data, including:
                     </p>
                     <ul className="text-sm text-red-700 mt-2 space-y-1">
-                      <li>• All business information</li>
-                      <li>• Product data and templates</li>
-                      <li>• Order history and invoices</li>
-                      <li>• Customer relationships</li>
-                      <li>• Account settings and preferences</li>
+                      {userType === 'customer' ? (
+                        <>
+                          <li>• All business profiles and information</li>
+                          <li>• Contact requests and manufacturer connections</li>
+                          <li>• Order history and invoices</li>
+                          <li>• Account settings and preferences</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>• All business information</li>
+                          <li>• Product data and templates</li>
+                          <li>• Order history and invoices</li>
+                          <li>• Customer relationships</li>
+                          <li>• Account settings and preferences</li>
+                        </>
+                      )}
                     </ul>
                     <p className="text-sm font-medium text-red-800 mt-2">
                       This action cannot be undone.

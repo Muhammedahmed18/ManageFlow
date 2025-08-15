@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
-import { Lock, User, Factory, ShoppingCart, ArrowRight, Key, UserPlus, Home } from "lucide-react";
+import { Lock, User, Factory, Users, ArrowRight, Key, UserPlus, Home, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import colors from '../assets/colors';
 
@@ -10,14 +10,14 @@ const LoginPage = () => {
   const [role, setRole] = useState("manufacturer");
   const [isLoaded, setIsLoaded] = useState(false);
   const navigate = useNavigate();
-  const { updateCurrentUser } = useAuth();
+  const { updateCurrentUser, loading } = useAuth();
   const [formData, setFormData] = useState({
     username: "",
     password: ""
   });
   const [error, setError] = useState({
     message: "",
-    type: "" // can be 'username', 'password', 'account', or 'general'
+    type: "" // can be 'username', 'password', 'account', 'network', or 'general'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -34,6 +34,20 @@ const LoginPage = () => {
       setFormData((prev) => ({ ...prev, username: lastEmail }));
     }
   }, []);
+
+  // Show loading spinner while AuthContext is initializing
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.background }}>
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.ivory }}>
+            <Loader2 className="animate-spin" size={32} style={{ color: colors.primary }} />
+          </div>
+          <p className="text-sm" style={{ color: colors.textSecondary }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -52,20 +66,55 @@ const LoginPage = () => {
     setError({ message: "", type: "" });
   };
 
+  const getErrorIcon = (type) => {
+    switch (type) {
+      case 'username':
+        return <User className="w-4 h-4 text-red-500" />;
+      case 'password':
+        return <Lock className="w-4 h-4 text-red-500" />;
+      case 'network':
+        return <Key className="w-4 h-4 text-orange-500" />;
+      case 'account':
+        return <UserPlus className="w-4 h-4 text-yellow-500" />;
+      default:
+        return <ArrowRight className="w-4 h-4 text-red-500" />;
+    }
+  };
+
+  const getErrorStyle = (type) => {
+    switch (type) {
+      case 'username':
+      case 'password':
+        return 'bg-red-50 text-red-700 border border-red-200';
+      case 'network':
+        return 'bg-orange-50 text-orange-700 border border-orange-200';
+      case 'account':
+        return 'bg-yellow-50 text-yellow-700 border border-yellow-200';
+      default:
+        return 'bg-red-50 text-red-700 border border-red-200';
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError({ message: "", type: "" });
 
-    // Client-side validation
+    // Client-side validation with specific messages
     if (!formData.username.trim()) {
-      setError({ message: "Please enter your username", type: "username" });
+      setError({ 
+        message: "Please enter your username or email", 
+        type: "username" 
+      });
       setIsSubmitting(false);
       return;
     }
 
     if (!formData.password) {
-      setError({ message: "Please enter your password", type: "password" });
+      setError({ 
+        message: "Please enter your password", 
+        type: "password" 
+      });
       setIsSubmitting(false);
       return;
     }
@@ -79,7 +128,7 @@ const LoginPage = () => {
       );
 
       const { access, refresh, role: userRole } = response;
-      updateCurrentUser({ token: access, role: userRole });
+      await updateCurrentUser({ token: access, role: userRole });
       sessionStorage.setItem("role", userRole);
       sessionStorage.setItem("accessToken", access);
       sessionStorage.setItem("refreshToken", refresh);
@@ -97,26 +146,58 @@ const LoginPage = () => {
         const { status, data } = err.response;
         
         if (status === 400) {
-          if (data.detail && data.detail.toLowerCase().includes("password")) {
-            errorMessage = "Password is incorrect. Please try again";
-            errorType = "password";
-          } else if (data.detail && data.detail.toLowerCase().includes("username")) {
-            errorMessage = "Username is incorrect. Please try again";
+          // Bad Request - Invalid credentials or field validation
+          if (data.detail) {
+            const detail = data.detail.toLowerCase();
+            
+            if (detail.includes("password") && detail.includes("incorrect")) {
+              errorMessage = "Password is incorrect. Please try again";
+              errorType = "password";
+            } else if (detail.includes("username") && detail.includes("incorrect")) {
+              errorMessage = "Username or email is incorrect. Please try again";
+              errorType = "username";
+            } else if (detail.includes("invalid credentials") || detail.includes("credentials")) {
+              errorMessage = "Username/email or password is incorrect. Please check and try again";
+              errorType = "general";
+            } else if (detail.includes("account") && (detail.includes("disabled") || detail.includes("inactive") || detail.includes("suspended"))) {
+              errorMessage = data.detail; // Show exact server message for account status
+              errorType = "account";
+            } else {
+              errorMessage = data.detail;
+              errorType = "general";
+            }
+          } else if (data.username) {
+            errorMessage = "Please enter a valid username or email";
             errorType = "username";
-          } else if (data.detail && data.detail.toLowerCase().includes("credentials")) {
-            errorMessage = "Invalid credentials. Please try again";
-          } else if (data.detail && data.detail.toLowerCase().includes("this account is")) {
-            errorMessage = data.detail;
-            errorType = "account";
+          } else if (data.password) {
+            errorMessage = "Please enter your password";
+            errorType = "password";
           }
         } else if (status === 401) {
-          errorMessage = "Unauthorized. Please check your credentials";
+          // Unauthorized - Wrong credentials
+          errorMessage = "Username/email or password is incorrect. Please try again";
+          errorType = "general";
         } else if (status === 404) {
+          // Not Found - User doesn't exist
           errorMessage = "Account not found. Please register first";
           errorType = "account";
+        } else if (status === 403) {
+          // Forbidden - Account might be disabled
+          errorMessage = data.detail || "This account is disabled. Please contact support";
+          errorType = "account";
+        } else if (status >= 500) {
+          // Server errors
+          errorMessage = "Server error. Please try again later";
+          errorType = "network";
         }
       } else if (err.request) {
+        // Network error - no response received
         errorMessage = "Network error. Please check your connection";
+        errorType = "network";
+      } else {
+        // Something else happened
+        errorMessage = "An unexpected error occurred. Please try again";
+        errorType = "general";
       }
       
       setError({ message: errorMessage, type: errorType });
@@ -163,7 +244,7 @@ const LoginPage = () => {
             transition={{ delay: 0.2 }}
             className="text-white/80 text-lg md:text-xl"
           >
-            Streamline your manufacturing and customer management in one powerful platform
+            The ultimate B2B marketplace connecting manufacturers with customers and providing comprehensive business management tools
           </motion.p>
         </div>
       </motion.div>
@@ -174,16 +255,15 @@ const LoginPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 border"
-          style={{ borderColor: colors.border }}
+          className="w-full max-w-md"
         >
           <div className="text-center mb-8">
             <motion.h2 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="text-2xl md:text-3xl font-semibold mb-2"
-              style={{ color: colors.text }}
+              className="text-3xl font-bold mb-2"
+              style={{ color: colors.textPrimary }}
             >
               Welcome Back
             </motion.h2>
@@ -191,66 +271,88 @@ const LoginPage = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              style={{ color: colors.textLight }}
+              style={{ color: colors.textSecondary }}
             >
-              Sign in to access your dashboard
+              Sign in to your account to continue
             </motion.p>
           </div>
 
-          {/* Role Selector */}
+          {/* Role Selection */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="flex items-center justify-center mb-6"
+            className="mb-6"
           >
-            <div className="flex bg-gray-100 rounded-xl p-1" style={{ borderColor: colors.border }}>
-              <button
+            <label className="block text-sm font-medium mb-3" style={{ color: colors.textPrimary }}>
+              I am a:
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
                 onClick={() => handleRoleChange("manufacturer")}
-                className={`flex items-center px-4 py-2 rounded-lg transition-all ${role === "manufacturer" ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`p-4 rounded-lg border-2 transition-all flex items-center justify-center ${
+                  role === "manufacturer" 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
                 style={{ 
-                  backgroundColor: role === "manufacturer" ? colors.white : 'transparent',
-                  color: role === "manufacturer" ? colors.primary : colors.textLight
+                  backgroundColor: role === "manufacturer" ? colors.primary + '10' : colors.background,
+                  borderColor: role === "manufacturer" ? colors.primary : colors.border
                 }}
               >
-                <Factory className="mr-2" size={18} />
-                Manufacturer
-              </button>
-              <button
+                <Factory className="w-5 h-5 mr-2" style={{ color: role === "manufacturer" ? colors.primary : colors.textSecondary }} />
+                <span className="font-medium" style={{ color: role === "manufacturer" ? colors.primary : colors.textPrimary }}>
+                  Manufacturer
+                </span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
                 onClick={() => handleRoleChange("customer")}
-                className={`flex items-center px-4 py-2 rounded-lg transition-all ${role === "customer" ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`p-4 rounded-lg border-2 transition-all flex items-center justify-center ${
+                  role === "customer" 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
                 style={{ 
-                  backgroundColor: role === "customer" ? colors.white : 'transparent',
-                  color: role === "customer" ? colors.primary : colors.textLight
+                  backgroundColor: role === "customer" ? colors.primary + '10' : colors.background,
+                  borderColor: role === "customer" ? colors.primary : colors.border
                 }}
               >
-                <ShoppingCart className="mr-2" size={18} />
-                Customer
-              </button>
+                <Users className="w-5 h-5 mr-2" style={{ color: role === "customer" ? colors.primary : colors.textSecondary }} />
+                <span className="font-medium" style={{ color: role === "customer" ? colors.primary : colors.textPrimary }}>
+                  Customer
+                </span>
+              </motion.button>
             </div>
           </motion.div>
 
-          {/* Error Message */}
+          {/* Enhanced Error Display */}
           {error.message && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`px-4 py-3 rounded-lg mb-6 text-sm flex items-center ${
-                error.type === 'account' ? 'bg-blue-50 border border-blue-100' : 'bg-rose-50 border border-rose-100'
-              }`}
-              style={{ 
-                color: error.type === 'account' ? colors.primary : colors.error
-              }}
+              className={`p-3 rounded-lg mb-4 text-sm flex items-start gap-2 ${getErrorStyle(error.type)}`}
             >
+              <div className="flex-shrink-0 mt-0.5">
+                {getErrorIcon(error.type)}
+              </div>
               <div className="flex-1">
-                {error.message}
+                <p className="font-medium">{error.message}</p>
                 {error.type === 'account' && (
-                  <button 
-                    onClick={() => navigate("/register")}
-                    className="ml-2 font-medium underline hover:text-primary"
-                  >
-                    Register now
-                  </button>
+                  <p className="text-xs mt-1 opacity-80">
+                    Need help? Contact support or try registering a new account.
+                  </p>
+                )}
+                {error.type === 'network' && (
+                  <p className="text-xs mt-1 opacity-80">
+                    Check your internet connection and try again.
+                  </p>
                 )}
               </div>
             </motion.div>
@@ -265,148 +367,111 @@ const LoginPage = () => {
             className="space-y-4"
           >
             <div>
-              <label htmlFor="username" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Username</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textPrimary }}>
+                Username or Email
+              </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
-                  color: error.type === 'username' ? colors.error : colors.textLighter 
+                  color: error.type === 'username' ? '#ef4444' : colors.textSecondary 
                 }} />
                 <input
-                  id="username"
                   type="text"
                   name="username"
-                  autoComplete="username"
-                  placeholder="Enter your username"
                   value={formData.username}
                   onChange={handleChange}
-                  className={`w-full pl-10 pr-4 py-3 bg-white text-gray-900 rounded-lg border focus:border-primary focus:ring-1 outline-none transition ${
-                    error.type === 'username' ? 'border-rose-300 focus:ring-rose-200' : 'border-gray-200 focus:ring-primary'
+                  placeholder="Enter your username or email"
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 outline-none transition ${
+                    error.type === 'username' 
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-400' 
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                   style={{ 
-                    color: colors.text,
-                    backgroundColor: colors.white
+                    backgroundColor: colors.background,
+                    color: colors.textPrimary
                   }}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Password</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textPrimary }}>
+                Password
+              </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ 
-                  color: error.type === 'password' ? colors.error : colors.textLighter 
+                  color: error.type === 'password' ? '#ef4444' : colors.textSecondary 
                 }} />
                 <input
-                  id="password"
                   type="password"
                   name="password"
-                  autoComplete="current-password"
-                  placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`w-full pl-10 pr-4 py-3 bg-white text-gray-900 rounded-lg border focus:border-primary focus:ring-1 outline-none transition ${
-                    error.type === 'password' ? 'border-rose-300 focus:ring-rose-200' : 'border-gray-200 focus:ring-primary'
+                  placeholder="Enter your password"
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 outline-none transition ${
+                    error.type === 'password' 
+                      ? 'border-red-300 focus:ring-red-200 focus:border-red-400' 
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                   style={{ 
-                    color: colors.text,
-                    backgroundColor: colors.white
+                    backgroundColor: colors.background,
+                    color: colors.textPrimary
                   }}
                 />
               </div>
-              <div className="mt-2 flex justify-start">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={() => navigate("/forgot-password")}
-                  className="text-sm flex items-center"
-                  style={{ color: colors.textLight }}
-                >
-                  <Key className="mr-1" size={14} style={{ color: colors.primary }} />
-                  Forgot password?
-                </motion.button>
-              </div>
             </div>
-
-            {/* Remove the business invite code input from the form UI */}
-            {/* <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                transition={{ duration: 0.3 }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: colors.textLight }}>Business Invite Code</label>
-                  <input
-                    type="text"
-                    name="business_id"
-                    placeholder="Enter invite code from manufacturer"
-                    value={formData.business_id}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-white text-gray-900 rounded-lg border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
-                    style={{ 
-                      borderColor: error.type === 'general' ? colors.error : colors.border,
-                      color: colors.text,
-                      backgroundColor: colors.white
-                    }}
-                  />
-                </div>
-                <div className="flex justify-start">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="button"
-                    onClick={() => navigate("/forgot-password")}
-                    className="text-sm flex items-center"
-                    style={{ color: colors.textLight }}
-                  >
-                    <Key className="mr-1" size={14} style={{ color: colors.primary }} />
-                    Forgot password?
-                  </motion.button>
-                </div>
-              </motion.div> */}
 
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={isSubmitting}
-              className={`w-full text-white px-6 py-3 rounded-lg transition-all flex items-center justify-center mt-6 ${
-                isSubmitting ? 'opacity-75 cursor-not-allowed' : ''
-              }`}
+              className="w-full text-white px-6 py-3 rounded-lg transition-all flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ backgroundColor: colors.primary }}
             >
               {isSubmitting ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Signing In...
                 </>
               ) : (
                 <>
-                  Sign In <ArrowRight className="ml-2" size={18} />
+                  Sign In
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
             </motion.button>
-
-            <div className="text-center mt-4">
-              <p className="text-sm" style={{ color: colors.textLight }}>
-                Don't have an account?{' '}
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  type="button"
-                  onClick={() => navigate("/register")}
-                  className="font-medium inline-flex items-center"
-                  style={{ color: colors.primary }}
-                >
-                  <UserPlus className="mr-1" size={14} />
-                  Register
-                </motion.button>
-              </p>
-            </div>
           </motion.form>
+
+          {/* Additional Links */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="mt-6 text-center space-y-3"
+          >
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate("/forgot-password")}
+              className="block text-sm hover:underline"
+              style={{ color: colors.primary }}
+            >
+              Forgot your password?
+            </motion.button>
+            
+            <div className="text-sm" style={{ color: colors.textSecondary }}>
+              Don't have an account?{' '}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate("/register")}
+                className="font-medium hover:underline"
+                style={{ color: colors.primary }}
+              >
+                Sign up here
+              </motion.button>
+            </div>
+          </motion.div>
         </motion.div>
       </div>
     </div>

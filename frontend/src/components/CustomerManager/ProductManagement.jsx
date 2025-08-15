@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { List, Calendar, Eye, Edit, Trash2, FolderTree, Table, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CategoryExplorer from './CategoryExplorer';
+import LoadingSpinner from '../shared/LoadingSpinner';
 
 const formatDate = (date) => {
   if (!date) return 'N/A';
@@ -35,6 +36,13 @@ const ProductManagement = ({
   onReloadCategories,
   businessId
 }) => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Set loading to false when products are loaded
+  useEffect(() => {
+    setIsLoading(false);
+  }, [products]);
+
   const [viewMode, setViewMode] = useState('table');
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -82,6 +90,17 @@ const ProductManagement = ({
     setIsEditMode(false);
     setShowAddForm(true);
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6" style={{ backgroundColor: '#F8FAFC' }}>
+        <div className="max-w-7xl mx-auto flex items-center justify-center h-96">
+          <LoadingSpinner size="lg" text="Loading products..." />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: '#F8FAFC' }}>

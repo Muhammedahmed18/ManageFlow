@@ -22,10 +22,11 @@ const Header = ({
       case 'dashboard': return 'Dashboard';
       case 'products':
         return productSubTab === 'templates' ? 'Product Templates' : 'Products';
-      case 'orders': return 'Orders';
-      case 'payments': return 'Invoices';
+      case 'orders': return 'Order Management';
+      case 'payments': return 'Invoice Management';
       case 'customers': return 'Customers';
       case 'analytics': return 'Analytics';
+      case 'predictions': return 'AI Predictions';
       case 'settings': return 'Settings';
       default: return 'Dashboard';
     }
@@ -44,6 +45,7 @@ const Header = ({
       case 'payments': return 'Manage and track all invoices for your business';
       case 'customers': return 'View and manage your customers';
       case 'analytics': return 'Track your business performance';
+      case 'predictions': return 'Business Intelligence & Analytics Dashboard';
       case 'settings': return 'Configure your settings';
       default: return 'Welcome back!';
     }

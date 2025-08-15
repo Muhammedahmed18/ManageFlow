@@ -1,16 +1,21 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Settings from './Settings';
 import Dashboard from './Dashboard';
+import LoadingSpinner from '../shared/LoadingSpinner';
 
 import ProductManagement from './ProductManagement';
 import OrderManagement from './OrderManagement';
 import CategoryExplorer from './CategoryExplorer';
 import PaymentManagement from './PaymentManagement';
+import SalesManagement from './SalesManagement';
 import ManufacturerManagement from './ManufacturerManagement';
 import TemplateManagement from './TemplateManagement';
+import ProposalManagement from './ProposalManagement';
+import ProposalResponseManagement from './ProposalResponseManagement';
 import ProductModal from './modals/ProductModal';
 import TemplateModal from './modals/TemplateModal';
 
@@ -20,6 +25,7 @@ import api from '../../services/authService';
 
 const CustomerManager = () => {
   const { id } = useParams();
+  const { currentUser } = useAuth();
   const [business, setBusiness] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,6 +49,10 @@ const CustomerManager = () => {
   const [showAddTemplateModal, setShowAddTemplateModal] = useState(false);
 
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  
+  // Proposal response management state
+  const [selectedProposal, setSelectedProposal] = useState(null);
+  const [showProposalResponses, setShowProposalResponses] = useState(false);
 
   const placeOrderRef = useRef(null);
 
@@ -69,38 +79,48 @@ const CustomerManager = () => {
     }
   }, [id]);
 
-      // Fetch categories and products when business is loaded
-    useEffect(() => {
-      if (!business?.id) return;
-      console.log('CustomerManager: Loading data for business ID:', business.id);
-      
-      // Fetch categories
-      api.get(`/management/product-categories/?business=${business.id}`)
-        .then(res => {
-          console.log('Categories response:', res.data);
+      // Automatic data fetch when business loads or tab changes
+      useEffect(() => {
+        if (business?.id) {
+          // Load data based on the current active tab
+          if (activeTab === 'products') {
+            loadCategories();
+            fetchProducts();
+            loadTemplates(); // Load templates for product creation
+          } else if (activeTab === 'templates') {
+            loadTemplates();
+          } else if (activeTab === 'dashboard') {
+            // Dashboard handles its own data loading
+          }
+        }
+      }, [business?.id, activeTab]);
+
+      // Manual data loading functions - only called when user clicks
+      const loadCategories = async () => {
+        if (!business?.id) return;
+        try {
+          const res = await api.get(`/management/product-categories/?business=${business.id}`);
           const categoriesArray = Array.isArray(res.data) ? res.data : [];
           setCategories(categoriesArray);
-        })
-        .catch(err => {
+        } catch (err) {
           console.error('Error fetching categories:', err);
           setCategories([]);
-        });
-    
-      // Fetch templates
-      api.get(`/management/product-templates/?business=${business.id}`)
-        .then(res => {
-          console.log('Templates response:', res.data);
+        }
+      };
+
+      const loadTemplates = async () => {
+        if (!business?.id) return;
+        try {
+          const res = await api.get(`/management/product-templates/?business=${business.id}`);
           const templatesArray = Array.isArray(res.data) ? res.data : [];
           setTemplates(templatesArray);
-        })
-        .catch(err => {
+        } catch (err) {
           console.error('Error fetching templates:', err);
           setTemplates([]);
-        });
-    
-    // Fetch products for ProductManagement
-    fetchProducts();
-  }, [business?.id]);
+        }
+      };
+
+
 
 
 
@@ -113,12 +133,13 @@ const CustomerManager = () => {
   // Helper to refresh products for ProductManagement
   const fetchProducts = async () => {
     if (!business?.id) return;
+    
+    // Prevent multiple simultaneous requests
+    if (isSavingProduct) return;
+    
     try {
-      console.log('Fetching products for ProductManagement:', business.id);
       const res = await api.get(`/management/products/?business=${business.id}`);
-      console.log('Products response:', res.data);
       const productsArray = Array.isArray(res.data) ? res.data : [];
-      console.log('Products array length:', productsArray.length);
       setProducts(productsArray);
     } catch (err) {
       console.error('Error fetching products:', err);
@@ -292,7 +313,11 @@ const CustomerManager = () => {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <LoadingSpinner size="xl" text="Loading business data..." />
+      </div>
+    );
   }
 
   if (error) {
@@ -333,6 +358,7 @@ const CustomerManager = () => {
         setProductSubTab={setProductSubTab}
         colors={colors}
         business={business}
+        currentUser={currentUser}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
@@ -404,7 +430,29 @@ const CustomerManager = () => {
           />
         )}
         {activeTab === 'payments' && <PaymentManagement colors={colors} businessId={business.id} />}
+        {activeTab === 'sales' && <SalesManagement colors={colors} businessId={business.id} />}
         {activeTab === 'manufacturers' && <ManufacturerManagement colors={colors} businessId={business.id} />}
+        {activeTab === 'proposals' && (
+          showProposalResponses ? (
+            <ProposalResponseManagement 
+              colors={colors} 
+              proposal={selectedProposal}
+              onBack={() => {
+                setShowProposalResponses(false);
+                setSelectedProposal(null);
+              }}
+            />
+          ) : (
+            <ProposalManagement 
+              colors={colors} 
+              business={business}
+              onViewResponses={(proposal) => {
+                setSelectedProposal(proposal);
+                setShowProposalResponses(true);
+              }}
+            />
+          )
+        )}
         {activeTab === 'settings' && <Settings colors={colors} businessId={business.id} />}
       </div>
 

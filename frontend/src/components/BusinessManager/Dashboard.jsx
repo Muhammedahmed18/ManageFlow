@@ -1,18 +1,72 @@
 import React from 'react';
 import { ShoppingBag, CreditCard, BarChart3, TrendingUp, Package, DollarSign, Calendar, Clock, Truck, Check } from 'lucide-react';
 
-const Dashboard = ({ products = [], customers = [], orders = [], businessId, setActiveTab }) => {
+const Dashboard = ({ products = [], customers = [], orders = [], invoices = [], businessId, setActiveTab }) => {
   // Ensure arrays are always arrays and log for debugging
   const productsArray = Array.isArray(products) ? products : [];
   const ordersArray = Array.isArray(orders) ? orders : [];
   const customersArray = Array.isArray(customers) ? customers : [];
+  const invoicesArray = Array.isArray(invoices) ? invoices : [];
   
-  console.log('Dashboard: Products count:', productsArray.length, 'Orders count:', ordersArray.length, 'Customers count:', customersArray.length);
+  console.log('Dashboard: Products count:', productsArray.length, 'Orders count:', ordersArray.length, 'Customers count:', customersArray.length, 'Invoices count:', invoicesArray.length);
+  console.log('Dashboard: Invoices data:', invoicesArray);
+  console.log('Dashboard: All invoices with full details:', invoicesArray.map(inv => ({
+    id: inv.id,
+    status: inv.status,
+    invoice_type: inv.invoice_type,
+    total_amount: inv.total_amount,
+    amount: inv.amount,
+    value: inv.value,
+    subtotal: inv.subtotal,
+    balance_due: inv.balance_due,
+    all_fields: Object.keys(inv),
+    all_values: Object.entries(inv).filter(([key, value]) => typeof value === 'number' || typeof value === 'string')
+  })));
+  console.log('Dashboard: Paid invoices:', invoicesArray.filter(inv => inv.status === 'paid'));
   
-  // Calculate total revenue from orders
-  const totalRevenue = ordersArray.reduce((sum, order) => {
-    return sum + (order.total_amount || 0);
-  }, 0);
+  // Calculate total revenue from PAID invoices only
+  const totalRevenue = invoicesArray
+    .filter(invoice => {
+      // Only include invoices with status 'paid' (case-insensitive)
+      const status = invoice.status?.toLowerCase();
+      const isPaid = status === 'paid';
+      console.log(`Invoice ${invoice.id} status check:`, { original: invoice.status, normalized: status, isPaid });
+      return isPaid;
+    })
+    .reduce((sum, invoice) => {
+      // Try multiple possible amount fields with detailed logging
+      const totalAmount = parseFloat(invoice.total_amount) || 0;
+      const amount = parseFloat(invoice.amount) || 0;
+      const value = parseFloat(invoice.value) || 0;
+      
+      // Use the highest non-zero value, or total_amount as priority
+      const finalAmount = totalAmount > 0 ? totalAmount : (amount > 0 ? amount : value);
+      
+      console.log(`Invoice ${invoice.id} amount calculation:`, {
+        total_amount: totalAmount,
+        amount: amount,
+        value: value,
+        finalAmount: finalAmount,
+        field_used: totalAmount > 0 ? 'total_amount' : (amount > 0 ? 'amount' : 'value')
+      });
+      
+      return sum + finalAmount;
+    }, 0);
+  
+  console.log('Revenue calculation summary:', {
+    totalRevenue,
+    paidInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid').length,
+    allInvoicesCount: invoicesArray.length
+  });
+  
+  // Debug logging for revenue calculation
+  console.log('BusinessManager Dashboard Revenue Debug:', {
+    totalRevenue,
+    ordersCount: ordersArray.length,
+    invoicesCount: invoicesArray.length,
+    paidInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid').length,
+    paidInvoices: invoicesArray.filter(inv => inv.status === 'paid').map(inv => ({ id: inv.id, amount: inv.total_amount, status: inv.status }))
+  });
   
   // Get recent orders (last 5)
   const recentOrders = ordersArray
@@ -123,6 +177,7 @@ const Dashboard = ({ products = [], customers = [], orders = [], businessId, set
             <span className="text-xs font-medium px-2 py-1 rounded-full bg-purple-50 text-purple-600 tracking-wide">Revenue</span>
           </div>
           <h2 className="text-sm font-medium text-slate-500 tracking-wide">Total Revenue</h2>
+          <p className="text-xs text-slate-400 mt-1">From paid invoices only</p>
           <div className="flex items-baseline mt-2">
             <p className="text-2xl font-bold text-slate-800 font-inter">{formatCurrency(totalRevenue)}</p>
           </div>

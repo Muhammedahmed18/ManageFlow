@@ -188,3 +188,58 @@ class CustomerBusinessDetail(APIView):
             return Response(serializer.data, status=200)
         except Business.DoesNotExist:
             return Response({"error": "Business not found."}, status=404)
+
+class CustomerBusinessVisibilityView(APIView):
+    """
+    Customer Business Visibility Management
+    Allows customers to toggle visibility of their businesses in manufacturer discovery
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get all customer's businesses with visibility status"""
+        if request.user.role != 'customer':
+            return Response({"error": "Only customers can access this endpoint."}, status=403)
+        
+        businesses = Business.objects.filter(owner=request.user).order_by('-id')
+        business_data = []
+        
+        for business in businesses:
+            business_data.append({
+                'business_id': business.id,
+                'business_name': business.name,
+                'is_public': business.is_public,
+                'total_products': business.products.count(),
+                'location': business.owner.location if business.owner else None,
+                'industry': business.industry,
+                'description': business.description,
+                'created_at': business.created_at
+            })
+        
+        return Response(business_data)
+
+    def patch(self, request, business_id):
+        """Toggle business visibility"""
+        if request.user.role != 'customer':
+            return Response({"error": "Only customers can modify business visibility."}, status=403)
+        
+        try:
+            business = Business.objects.get(id=business_id, owner=request.user)
+            is_public = request.data.get('is_public')
+            
+            if is_public is not None:
+                business.is_public = is_public
+                business.save()
+                
+                status_text = "public" if is_public else "private"
+                return Response({
+                    "message": f"Business '{business.name}' is now {status_text}",
+                    "business_id": business.id,
+                    "business_name": business.name,
+                    "is_public": business.is_public
+                })
+            else:
+                return Response({"error": "is_public field is required."}, status=400)
+                
+        except Business.DoesNotExist:
+            return Response({"error": "Business not found."}, status=404)

@@ -43,9 +43,21 @@ const InvoiceDetailModal = ({ invoice, onClose, onDownload, businessId }) => {
     }
   };
 
-  const handleDownloadPDF = async (invoice, businessId) => {
+  const handleDownloadPDF = async () => {
     try {
       setLoading(true);
+      
+      // Validate required data
+      if (!invoice) {
+        toast.error('No invoice data available for PDF generation');
+        return;
+      }
+  
+      if (!businessId) {
+        toast.error('Business information is required for PDF generation');
+        return;
+      }
+  
       console.log("Downloading PDF for invoice:", invoice);
   
       // Fetch business information for the PDF
@@ -54,330 +66,343 @@ const InvoiceDetailModal = ({ invoice, onClose, onDownload, businessId }) => {
         const businessResponse = await api.get(`/management/customer/business/${businessId}/`);
         businessInfo = businessResponse.data;
       } catch (error) {
-        console.warn("Could not fetch business information:", error);
-        // Fallback business info if API call fails
+        console.warn("Could not fetch business information, using defaults:", error);
         businessInfo = {
-            name: "Fauget Technology",
-            address: "123 Anywhere St\nAny City\n12345"
+          name: "Your Business Name",
+          email: "contact@yourbusiness.com",
+          phone: "(123) 456-7890"
         };
       }
   
-      // Create a professional PDF with enhanced layout
+      // Create a new PDF document
       const pdfDoc = await PDFDocument.create();
       const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
-  
+      
       // Embed fonts
       const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const helveticaObliqueFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-  
-      // Define colors from the image
-      const blueColor = rgb(0.12, 0.35, 0.73);
-      const darkGray = rgb(0.3, 0.3, 0.3);
-      const lightGray = rgb(0.9, 0.9, 0.9);
-      const black = rgb(0, 0, 0);
-  
+      
+      // Define colors
+      const primaryColor = rgb(0.2, 0.4, 0.8); // Blue
+      const secondaryColor = rgb(0.3, 0.3, 0.3); // Dark gray
+      const accentColor = rgb(0.1, 0.1, 0.1); // Black
+      const lightGray = rgb(0.9, 0.9, 0.9); // Light gray
+      const greenColor = rgb(0.2, 0.8, 0.2); // Green
+      const redColor = rgb(0.8, 0.2, 0.2); // Red
+      
       // Page dimensions
       const pageWidth = 595.28;
       const pageHeight = 841.89;
-      const margin = 40;
+      const margin = 50;
       const contentWidth = pageWidth - (margin * 2);
-  
+      
       let yPosition = pageHeight - margin;
-  
-      // --- Header Section ---
-      const headerHeight = 70;
-      const headerY = yPosition;
-  
-      // Invoice Title
-      page.drawText("Invoice", {
+      
+      // Header with business information
+      const headerHeight = 80;
+      
+      // Draw header background
+      page.drawRectangle({
         x: margin,
-        y: headerY - 20,
-        size: 30,
-        font: helveticaBoldFont,
-        color: blueColor,
+        y: yPosition - headerHeight,
+        width: contentWidth,
+        height: headerHeight,
+        color: lightGray,
       });
       
-      // Business Logo (mocking with a text 'MF' as in the image)
-      const logoText = "MF";
-      const logoX = pageWidth - margin - 50;
-      page.drawText(logoText, {
-        x: logoX,
-        y: headerY - 20,
-        size: 40,
-        font: helveticaBoldFont,
-        color: blueColor
-      });
-  
-      // Business Info
-      const businessName = businessInfo?.name || "Fauget Technology";
+      // Business name (use fetched data or default)
+      const businessName = businessInfo?.name || "Your Business Name";
       page.drawText(businessName, {
-        x: pageWidth - margin - 150,
-        y: headerY - 20,
-        size: 12,
+        x: margin + 20,
+        y: yPosition - 30,
+        size: 18,
         font: helveticaBoldFont,
-        color: darkGray,
-        align: 'right',
-      });
-      const businessAddress = businessInfo?.address || "123 Anywhere St\nAny City\n12345";
-      page.drawText(businessAddress, {
-        x: pageWidth - margin - 150,
-        y: headerY - 35,
-        size: 10,
-        font: helveticaFont,
-        color: darkGray,
-        align: 'right',
-        lineHeight: 12
+        color: primaryColor,
       });
       
-      yPosition -= headerHeight;
-  
-      // Horizontal Separator Line
+      // Invoice title
+      page.drawText("INVOICE", {
+        x: margin + 20,
+        y: yPosition - 55,
+        size: 14,
+        font: helveticaBoldFont,
+        color: accentColor,
+      });
+      
+      // Add business contact info if available
+      if (businessInfo?.email || businessInfo?.phone) {
+        const contactInfo = [];
+        if (businessInfo.email) contactInfo.push(`Email: ${businessInfo.email}`);
+        if (businessInfo.phone) contactInfo.push(`Phone: ${businessInfo.phone}`);
+        
+        if (contactInfo.length > 0) {
+          page.drawText(contactInfo.join(' | '), {
+            x: margin + 20,
+            y: yPosition - 75,
+            size: 8,
+            font: helveticaFont,
+            color: secondaryColor,
+          });
+        }
+      }
+      
+      yPosition -= headerHeight + 30;
+      
+      // Invoice summary section
+      const summaryTitle = "Invoice Summary";
+      page.drawText(summaryTitle, {
+        x: margin,
+        y: yPosition,
+        size: 16,
+        font: helveticaBoldFont,
+        color: primaryColor,
+      });
+      yPosition -= 25;
+      
+      // Draw summary box
+      const summaryBoxHeight = 100;
+      
+      page.drawRectangle({
+        x: margin,
+        y: yPosition - summaryBoxHeight,
+        width: contentWidth,
+        height: summaryBoxHeight,
+        borderColor: primaryColor,
+        borderWidth: 1,
+        color: rgb(0.98, 0.98, 0.98),
+      });
+      
+      // Invoice information in two columns
+      const leftColumn = margin + 20;
+      const rightColumn = margin + contentWidth / 2 + 20;
+      
+      const invoiceInfo = [
+        { 
+          label: "Invoice Number", 
+          value: invoice.invoice_number || `INV-${invoice.id || '0000'}` 
+        },
+        { 
+          label: "Invoice Date", 
+          value: invoice.created_at ? formatDate(invoice.created_at) : 'N/A' 
+        },
+        { 
+          label: "Due Date", 
+          value: invoice.due_date ? formatDate(invoice.due_date) : 'N/A' 
+        },
+        { 
+          label: "Status", 
+          value: invoice.status ? 
+                invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1) : 
+                'Pending',
+          isStatus: true 
+        },
+        { 
+          label: "Amount", 
+          value: formatCurrency(invoice.amount || 0), 
+          isAmount: true 
+        },
+        { 
+          label: "Customer", 
+          value: invoice.customer_name || invoice.business_name || 'N/A' 
+        },
+      ];
+      
+      let leftY = yPosition - 20;
+      let rightY = yPosition - 20;
+      
+      invoiceInfo.forEach(({ label, value, isStatus, isAmount }, index) => {
+        const isLeftColumn = index < 3;
+        const x = isLeftColumn ? leftColumn : rightColumn;
+        let y = isLeftColumn ? leftY : rightY;
+        
+        // Label
+        page.drawText(`${label}:`, {
+          x: x,
+          y: y,
+          size: 10,
+          font: helveticaBoldFont,
+          color: secondaryColor,
+        });
+        
+        // Value with special formatting
+        let valueColor = accentColor;
+        if (isStatus) {
+          valueColor = invoice.status === 'paid' ? greenColor : 
+                      invoice.status === 'overdue' ? redColor : 
+                      rgb(0.8, 0.6, 0.2); // Orange for pending
+        }
+        if (isAmount) {
+          valueColor = greenColor;
+        }
+        
+        page.drawText(value, {
+          x: x + 80,
+          y: y,
+          size: 10,
+          font: helveticaFont,
+          color: valueColor,
+        });
+        
+        if (isLeftColumn) {
+          leftY -= 20;
+        } else {
+          rightY -= 20;
+        }
+      });
+      
+      yPosition -= summaryBoxHeight + 40;
+      
+      // Draw separator line
       page.drawLine({
         start: { x: margin, y: yPosition },
         end: { x: pageWidth - margin, y: yPosition },
-        thickness: 0.5,
+        thickness: 1,
         color: lightGray,
       });
-  
-      yPosition -= 20;
-  
-      // --- Client and Invoice Info Section ---
-      const infoBoxY = yPosition;
-      const infoBoxHeight = 80;
-  
-      // Client Info
-      page.drawText("CLIENT", {
-        x: margin,
-        y: infoBoxY,
-        size: 12,
-        font: helveticaBoldFont,
-        color: darkGray,
-      });
-      page.drawText(invoice.customer_name || 'N/A', {
-        x: margin,
-        y: infoBoxY - 20,
-        size: 12,
-        font: helveticaBoldFont,
-        color: black,
-      });
-      page.drawText(`Date Issued: ${invoice.created_at ? format(new Date(invoice.created_at), 'dd MMM yy') : 'N/A'}`, {
-        x: margin,
-        y: infoBoxY - 40,
-        size: 10,
-        font: helveticaFont,
-        color: darkGray,
-      });
-      page.drawText(`Invoice No: ${invoice.invoice_number || 'N/A'}`, {
-        x: margin,
-        y: infoBoxY - 55,
-        size: 10,
-        font: helveticaFont,
-        color: darkGray,
-      });
-  
-      yPosition -= infoBoxHeight;
-  
-      // --- Line Items Table Section ---
-      yPosition -= 40;
-  
-      // Table Header
-      const tableHeaderY = yPosition;
-      const headerTextY = tableHeaderY - 15;
-      const column1X = margin + 10;
-      const column2X = margin + contentWidth * 0.45;
-      const column3X = margin + contentWidth * 0.65;
-      const column4X = margin + contentWidth * 0.85;
-  
-      page.drawText("Description", {
-        x: column1X,
-        y: headerTextY,
-        size: 10,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-      page.drawText("Rate", {
-        x: column2X,
-        y: headerTextY,
-        size: 10,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-      page.drawText("Hours", {
-        x: column3X,
-        y: headerTextY,
-        size: 10,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-      page.drawText("Subtotal", {
-        x: column4X,
-        y: headerTextY,
-        size: 10,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-  
-      // Horizontal Separator Line below header
-      page.drawLine({
-        start: { x: margin, y: tableHeaderY - 25 },
-        end: { x: pageWidth - margin, y: tableHeaderY - 25 },
-        thickness: 0.5,
-        color: lightGray,
-      });
-  
-      yPosition -= 35;
       
-      // Table Rows
-      const items = invoice.items || [];
-      const rowHeight = 25;
-      let itemsSubtotal = 0;
-  
-      items.forEach((item) => {
-          page.drawText(item.description || 'N/A', {
-              x: column1X,
-              y: yPosition,
-              size: 10,
-              font: helveticaFont,
-              color: darkGray,
+      yPosition -= 30;
+      
+      // Invoice details section
+      const hasItems = invoice.items && invoice.items.length > 0;
+      const hasDescription = invoice.description;
+      
+      if (hasItems || hasDescription) {
+        page.drawText("Invoice Details", {
+          x: margin,
+          y: yPosition,
+          size: 16,
+          font: helveticaBoldFont,
+          color: primaryColor,
+        });
+        yPosition -= 25;
+        
+        // Draw details table header
+        const tableHeaderHeight = 25;
+        page.drawRectangle({
+          x: margin,
+          y: yPosition - tableHeaderHeight,
+          width: contentWidth,
+          height: tableHeaderHeight,
+          color: primaryColor,
+        });
+        
+        page.drawText("Description", {
+          x: margin + 15,
+          y: yPosition - 15,
+          size: 11,
+          font: helveticaBoldFont,
+          color: rgb(1, 1, 1),
+        });
+        
+        page.drawText("Amount", {
+          x: margin + contentWidth - 100,
+          y: yPosition - 15,
+          size: 11,
+          font: helveticaBoldFont,
+          color: rgb(1, 1, 1),
+        });
+        
+        yPosition -= tableHeaderHeight;
+        
+        // Add invoice items or description
+        const items = hasItems ? 
+          invoice.items : 
+          [{ description: invoice.description || 'Invoice for services', amount: invoice.amount || 0 }];
+        
+        items.forEach((item, index) => {
+          const rowHeight = 20;
+          
+          // Alternate row colors
+          const rowColor = index % 2 === 0 ? rgb(1, 1, 1) : rgb(0.98, 0.98, 0.98);
+          
+          page.drawRectangle({
+            x: margin,
+            y: yPosition - rowHeight,
+            width: contentWidth,
+            height: rowHeight,
+            color: rowColor,
           });
-          page.drawText(item.rate ? formatCurrency(item.rate) : '$ 0.00', {
-              x: column2X,
-              y: yPosition,
-              size: 10,
-              font: helveticaFont,
-              color: darkGray,
+          
+          // Description
+          const description = item.description || 'Invoice item';
+          page.drawText(description, {
+            x: margin + 15,
+            y: yPosition - 8,
+            size: 10,
+            font: helveticaFont,
+            color: secondaryColor,
           });
-          page.drawText(`${item.hours || 0}`, {
-              x: column3X,
-              y: yPosition,
-              size: 10,
-              font: helveticaFont,
-              color: darkGray,
+          
+          // Amount
+          const amount = formatCurrency(item.amount || item.price || 0);
+          page.drawText(amount, {
+            x: margin + contentWidth - 100,
+            y: yPosition - 8,
+            size: 10,
+            font: helveticaFont,
+            color: greenColor,
           });
-          const subtotal = (item.rate || 0) * (item.hours || 0);
-          page.drawText(formatCurrency(subtotal), {
-              x: column4X,
-              y: yPosition,
-              size: 10,
-              font: helveticaFont,
-              color: darkGray,
-          });
-  
-          itemsSubtotal += subtotal;
+          
           yPosition -= rowHeight;
-      });
-  
-      yPosition -= 40;
-  
-      // --- Totals Summary Section ---
-      const summaryX = margin + contentWidth * 0.6;
-      const summaryValueX = margin + contentWidth * 0.85;
-  
-      // Total Amount
-      page.drawText("Total Amount", {
-        x: summaryX,
-        y: yPosition,
-        size: 10,
-        font: helveticaFont,
-        color: black,
-      });
-      page.drawText(formatCurrency(itemsSubtotal), {
-        x: summaryValueX,
-        y: yPosition,
-        size: 10,
-        font: helveticaFont,
-        color: black,
-      });
-  
-      yPosition -= 20;
-  
-      // Tax
-      const taxRate = invoice.tax || 0.15;
-      const taxAmount = itemsSubtotal * taxRate;
-      page.drawText(`Tax ${taxRate * 100}%`, {
-        x: summaryX,
-        y: yPosition,
-        size: 10,
-        font: helveticaFont,
-        color: black,
-      });
-      page.drawText(formatCurrency(taxAmount), {
-        x: summaryValueX,
-        y: yPosition,
-        size: 10,
-        font: helveticaFont,
-        color: blueColor,
-      });
-  
-      yPosition -= 20;
-  
-      // Horizontal Separator Line before Amount Due
+        });
+        
+        yPosition -= 20;
+      }
+      
+      // Footer
+      const footerY = margin + 50;
+      
+      // Draw footer separator line
       page.drawLine({
-        start: { x: summaryX, y: yPosition },
-        end: { x: pageWidth - margin, y: yPosition },
+        start: { x: margin, y: footerY + 20 },
+        end: { x: pageWidth - margin, y: footerY + 20 },
         thickness: 0.5,
         color: lightGray,
-      });
-  
-      yPosition -= 20;
-  
-      // Amount Due
-      const amountDue = itemsSubtotal + taxAmount;
-      page.drawText("Amount Due", {
-        x: summaryX,
-        y: yPosition,
-        size: 14,
-        font: helveticaBoldFont,
-        color: black,
-      });
-      page.drawText(formatCurrency(amountDue), {
-        x: summaryValueX,
-        y: yPosition,
-        size: 14,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-  
-      // --- Due By Section ---
-      const dueByY = margin + 80;
-      page.drawText("Due By", {
-        x: pageWidth - margin - 100,
-        y: dueByY + 20,
-        size: 20,
-        font: helveticaBoldFont,
-        color: blueColor,
-      });
-      page.drawText(invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yy') : 'N/A', {
-        x: pageWidth - margin - 100,
-        y: dueByY,
-        size: 16,
-        font: helveticaObliqueFont,
-        color: darkGray,
       });
       
-      // Footer line at the bottom
-      page.drawLine({
-        start: { x: margin, y: margin + 10 },
-        end: { x: pageWidth - margin, y: margin + 10 },
-        thickness: 0.5,
-        color: lightGray,
+      page.drawText("Generated by ManageFlow", {
+        x: margin,
+        y: footerY,
+        size: 8,
+        font: helveticaFont,
+        color: secondaryColor,
       });
-  
+      
+      page.drawText(`Generated on: ${new Date().toLocaleDateString()}`, {
+        x: pageWidth - margin - 120,
+        y: footerY,
+        size: 8,
+        font: helveticaFont,
+        color: secondaryColor,
+      });
+      
+      // Add page number
+      page.drawText("Page 1 of 1", {
+        x: pageWidth / 2 - 30,
+        y: footerY,
+        size: 8,
+        font: helveticaFont,
+        color: secondaryColor,
+      });
+      
       // Finalize and trigger download
       const pdfBytes = await pdfDoc.save();
       console.log("PDF generated, size:", pdfBytes.byteLength);
-  
+      
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
   
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `invoice_${invoice.invoice_number || invoice.id}.pdf`);
+      link.setAttribute(
+        "download", 
+        `invoice_${invoice.invoice_number || invoice.id || 'unknown'}.pdf`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
-  
+      
+      // Clean up the URL object
       window.URL.revokeObjectURL(url);
   
       toast.success("Invoice PDF downloaded successfully!");

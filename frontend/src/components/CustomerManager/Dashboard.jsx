@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Package, DollarSign, Users, Calendar, Activity, Loader2, Building, TrendingUp } from 'lucide-react';
+import { ShoppingBag, Package, DollarSign, Users, Calendar, Activity, Building, TrendingUp, TrendingDown, Target, RefreshCw, BarChart3 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import CustomerPerformanceOverview from './CustomerPerformanceOverview';
+import LoadingSpinner from '../shared/LoadingSpinner';
 
 const Dashboard = ({ businessId = null }) => {
   const { currentUser, isAuthenticated } = useAuth();
@@ -14,6 +16,15 @@ const Dashboard = ({ businessId = null }) => {
 
   // API base URL - adjust this if your backend runs on a different port
   const API_BASE_URL = 'http://localhost:8000';
+
+  // Automatic data fetch when component mounts
+  useEffect(() => {
+    if (businessId && isAuthenticated) {
+      fetchDashboardData();
+    } else {
+      setLoading(false);
+    }
+  }, [businessId, isAuthenticated]);
 
   // Color scheme constants
   const colors = {
@@ -35,172 +46,167 @@ const Dashboard = ({ businessId = null }) => {
     error: '#EF4444'
   };
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
 
-        console.log('Starting dashboard data fetch...');
-        console.log('Current user:', currentUser);
-        console.log('Is authenticated:', isAuthenticated);
 
-        // Get token from sessionStorage (as used in AuthContext)
-        const token = sessionStorage.getItem('accessToken');
-        console.log('Token available:', !!token);
+  // Manual data fetching functions - only called when user clicks
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        if (!token) {
-          throw new Error('No authentication token found');
-        }
+      // Get token from sessionStorage (as used in AuthContext)
+      const token = sessionStorage.getItem('accessToken');
 
-        // Fetch businesses - customers can see their own business
-        console.log('Fetching businesses...');
-        try {
-          const businessesResponse = await fetch(`${API_BASE_URL}/api/management/businesses/`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          console.log('Businesses response status:', businessesResponse.status);
-          console.log('Businesses response headers:', businessesResponse.headers);
-          
-          if (!businessesResponse.ok) {
-            const errorText = await businessesResponse.text();
-            console.warn('Businesses API failed:', businessesResponse.status, errorText);
-            setBusinesses([]);
-          } else {
-            const businessesData = await businessesResponse.json();
-            console.log('Businesses data:', businessesData);
-            setBusinesses(businessesData);
-          }
-        } catch (error) {
-          console.warn('Error fetching businesses:', error);
-          setBusinesses([]);
-        }
-
-        // Fetch customer orders
-        console.log('Fetching customer orders...');
-        try {
-          const ordersResponse = await fetch(`${API_BASE_URL}/api/management/customer/orders/`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          console.log('Orders response status:', ordersResponse.status);
-          
-          if (!ordersResponse.ok) {
-            const errorText = await ordersResponse.text();
-            console.warn('Orders API failed:', ordersResponse.status, errorText);
-            setOrders([]);
-          } else {
-            const ordersData = await ordersResponse.json();
-            console.log('Orders data:', ordersData);
-            setOrders(ordersData);
-          }
-        } catch (error) {
-          console.warn('Error fetching orders:', error);
-          setOrders([]);
-        }
-
-        // Fetch customer invoices
-        console.log('Fetching customer invoices...');
-        try {
-          const invoicesResponse = await fetch(`${API_BASE_URL}/api/management/invoices/`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          console.log('Invoices response status:', invoicesResponse.status);
-          
-          if (!invoicesResponse.ok) {
-            const errorText = await invoicesResponse.text();
-            console.warn('Invoices API failed:', invoicesResponse.status, errorText);
-            setInvoices([]);
-          } else {
-            const invoicesData = await invoicesResponse.json();
-            console.log('Invoices data:', invoicesData);
-            setInvoices(invoicesData);
-          }
-        } catch (error) {
-          console.warn('Error fetching invoices:', error);
-          setInvoices([]);
-        }
-
-        // Fetch products for the specific business
-        console.log('Fetching products for business:', businessId);
-        try {
-          const productsResponse = await fetch(`${API_BASE_URL}/api/management/products/?business=${businessId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          console.log('Products response status:', productsResponse.status);
-          
-          if (!productsResponse.ok) {
-            const errorText = await productsResponse.text();
-            console.warn('Products API failed:', productsResponse.status, errorText);
-            setProducts([]);
-          } else {
-            const productsData = await productsResponse.json();
-            console.log('Products data:', productsData);
-            const productsArray = Array.isArray(productsData) ? productsData : [];
-            console.log('Products array length:', productsArray.length);
-            setProducts(productsArray);
-          }
-        } catch (error) {
-          console.warn('Error fetching products:', error);
-          setProducts([]);
-        }
-
-        console.log('All data fetched successfully');
-
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        setError(`Failed to load dashboard data: ${error.message}`);
-      } finally {
-        setLoading(false);
+      if (!token) {
+        throw new Error('No authentication token found');
       }
-    };
 
-    if (isAuthenticated && currentUser) {
-      fetchDashboardData();
-    } else {
-      console.log('No user available, setting loading to false');
+      // Fetch businesses - customers can see their own business
+      try {
+        const businessesResponse = await fetch(`${API_BASE_URL}/api/management/businesses/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!businessesResponse.ok) {
+          console.warn('Businesses API failed:', businessesResponse.status);
+          setBusinesses([]);
+        } else {
+          const businessesData = await businessesResponse.json();
+          setBusinesses(businessesData);
+        }
+      } catch (error) {
+        console.warn('Error fetching businesses:', error);
+        setBusinesses([]);
+      }
+
+      // Fetch customer orders
+      try {
+        const ordersResponse = await fetch(`${API_BASE_URL}/api/management/customer/orders/?business=${businessId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!ordersResponse.ok) {
+          console.warn('Orders API failed:', ordersResponse.status);
+          setOrders([]);
+        } else {
+          const ordersData = await ordersResponse.json();
+          setOrders(ordersData);
+        }
+      } catch (error) {
+        console.warn('Error fetching orders:', error);
+        setOrders([]);
+      }
+
+      // Fetch customer invoices
+      try {
+        const invoicesResponse = await fetch(`${API_BASE_URL}/api/management/invoices/?business=${businessId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!invoicesResponse.ok) {
+          console.warn('Invoices API failed:', invoicesResponse.status);
+          setInvoices([]);
+        } else {
+          const invoicesData = await invoicesResponse.json();
+          setInvoices(invoicesData);
+        }
+      } catch (error) {
+        console.warn('Error fetching invoices:', error);
+        setInvoices([]);
+      }
+
+      // Fetch products for the specific business
+      try {
+        const productsResponse = await fetch(`${API_BASE_URL}/api/management/products/?business=${businessId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!productsResponse.ok) {
+          console.warn('Products API failed:', productsResponse.status);
+          setProducts([]);
+        } else {
+          const productsData = await productsResponse.json();
+          const productsArray = Array.isArray(productsData) ? productsData : [];
+          setProducts(productsArray);
+        }
+      } catch (error) {
+        console.warn('Error fetching products:', error);
+        setProducts([]);
+      }
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setError(`Failed to load dashboard data: ${error.message}`);
+    } finally {
       setLoading(false);
     }
-  }, [currentUser, isAuthenticated]);
+  };
 
-  // Calculate total revenue from paid invoices
+  // Calculate total revenue from paid invoices (customer invoices)
   const totalRevenue = invoices
-    .filter(invoice => invoice.status === 'paid')
-    .reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0);
+    .filter(invoice => invoice.status === 'paid' && invoice.invoice_type === 'customer')
+    .reduce((sum, invoice) => sum + (parseFloat(invoice.total_amount) || 0), 0);
 
-  // Ensure products is always an array and log for debugging
+  // Calculate revenue from completed orders (customer orders)
+  const orderRevenue = orders
+    .filter(order => order.status === 'completed')
+    .reduce((sum, order) => {
+      const orderValue = order.data?.total_amount || order.data?.amount || 0;
+      return sum + (parseFloat(orderValue) || 0);
+    }, 0);
+
+  // For customers, show their order revenue as the primary metric
+  const finalRevenue = orderRevenue || totalRevenue;
+
+  // Calculate revenue growth based on recent vs older orders
+  const calculateRevenueGrowth = () => {
+    if (orders.length === 0) return 0;
+    
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
+    
+    // Recent revenue (last 30 days) from completed orders
+    const recentRevenue = orders
+      .filter(order => order.status === 'completed' && new Date(order.created_at) >= thirtyDaysAgo)
+      .reduce((sum, order) => {
+        const orderValue = order.data?.total_amount || order.data?.amount || 0;
+        return sum + (parseFloat(orderValue) || 0);
+      }, 0);
+    
+    // Previous period revenue (30-60 days ago) from completed orders
+    const previousRevenue = orders
+      .filter(order => order.status === 'completed' && 
+        new Date(order.created_at) >= sixtyDaysAgo && 
+        new Date(order.created_at) < thirtyDaysAgo)
+      .reduce((sum, order) => {
+        const orderValue = order.data?.total_amount || order.data?.amount || 0;
+        return sum + (parseFloat(orderValue) || 0);
+      }, 0);
+    
+    if (previousRevenue === 0) return recentRevenue > 0 ? 100 : 0;
+    
+    return ((recentRevenue - previousRevenue) / previousRevenue) * 100;
+  };
+  
+  const revenueGrowth = calculateRevenueGrowth();
+
+  // Ensure products is always an array
   const productsArray = Array.isArray(products) ? products : [];
-  console.log('CustomerManager Dashboard: Products count:', productsArray.length, 'Products:', productsArray);
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: colors.background }}>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <Loader2 className="mx-auto mb-4 animate-spin" size={40} style={{ color: colors.primary }} />
-            <p className="text-lg font-medium" style={{ color: colors.textPrimary }}>Loading your dashboard...</p>
-            <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>Please wait while we fetch your data</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   // No business ID provided
   if (!businessId) {
@@ -350,7 +356,23 @@ const Dashboard = ({ businessId = null }) => {
           </div>
           <h2 className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Revenue</h2>
           <div className="flex items-baseline">
-            <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>${totalRevenue.toFixed(2)}</p>
+            <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>${finalRevenue.toFixed(2)}</p>
+          </div>
+          <div className="flex items-center mt-2">
+            {revenueGrowth > 0 ? (
+              <TrendingUp size={14} style={{ color: colors.success }} />
+            ) : revenueGrowth < 0 ? (
+              <TrendingDown size={14} style={{ color: colors.error }} />
+            ) : (
+              <Target size={14} style={{ color: colors.warning }} />
+            )}
+            <span className={`ml-1 text-xs font-medium ${
+              revenueGrowth > 0 ? 'text-green-600' : 
+              revenueGrowth < 0 ? 'text-red-600' : 'text-yellow-600'
+            }`}>
+              {revenueGrowth > 0 ? '+' : ''}{revenueGrowth}%
+            </span>
+            <span className="ml-1 text-xs" style={{ color: colors.textMuted }}>vs last month</span>
           </div>
         </div>
       </div>
@@ -409,14 +431,14 @@ const Dashboard = ({ businessId = null }) => {
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-center h-40 rounded-lg border-2 border-dashed" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
-            <div className="text-center">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.ivory }}>
-                <TrendingUp size={20} style={{ color: colors.primary }} />
-              </div>
-              <h3 className="text-sm font-semibold mb-1" style={{ color: colors.textPrimary }}>Analytics Coming Soon</h3>
-              <p className="text-xs" style={{ color: colors.textSecondary }}>We're working on beautiful charts and insights</p>
-            </div>
+          <div className="h-40">
+            <CustomerPerformanceOverview 
+          businessId={businessId} 
+          selectedTimePeriod={selectedTimePeriod}
+          orders={orders}
+          invoices={invoices}
+          products={products}
+        />
           </div>
         </div>
         

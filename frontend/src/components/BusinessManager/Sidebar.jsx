@@ -10,7 +10,9 @@ import {
     ClipboardList,
     CreditCard,
     LogOut,
-    DollarSign
+    DollarSign,
+    TrendingUp,
+    BarChart3
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
@@ -56,6 +58,7 @@ const Sidebar = ({
         { name: 'Products', icon: Package, tab: 'products' },
         { name: 'Orders', icon: ClipboardList, tab: 'orders' },
         { name: 'Payments', icon: CreditCard, tab: 'payments'},
+        { name: 'AI Predictions', icon: TrendingUp, tab: 'predictions'},
         { name: 'Settings', icon: Settings, tab: 'settings'},
     ];
 
