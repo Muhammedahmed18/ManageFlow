@@ -53,8 +53,15 @@ const NewChatModal = ({ isOpen, onClose, onChatCreated }) => {
     try {
       setCreatingChat(request.id);
       
-      // Use existing chat room creation endpoint
-      const response = await api.get(`/management/chat-rooms/get_or_create_for_request/?request_id=${request.id}`);
+      let response;
+      
+      if (request.type === 'business_relationship') {
+        // Create chat for business relationship
+        response = await api.get(`/management/chat-rooms/get_or_create_for_business/?business_id=${request.id}`);
+      } else {
+        // Create chat for contact request
+        response = await api.get(`/management/chat-rooms/get_or_create_for_request/?request_id=${request.id}`);
+      }
       
       // Call parent callback with the new chat room
       if (onChatCreated) {
@@ -164,7 +171,7 @@ const NewChatModal = ({ isOpen, onClose, onChatCreated }) => {
                             </h3>
                             <p className="text-sm text-gray-500">
                               {searchTerm ? 'Try adjusting your search terms' : 
-                                (isManufacturer ? 'No customers have approved your requests yet' : 'No manufacturers have approved your requests yet')}
+                                (isManufacturer ? 'No customers found. You need to either have approved contact requests or be joined to their businesses.' : 'No manufacturers found. You need to either have approved contact requests or be joined to their businesses.')}
                             </p>
                           </div>
             ) : (
@@ -221,9 +228,21 @@ const NewChatModal = ({ isOpen, onClose, onChatCreated }) => {
                                       onClick={() => handleCreateChat(item, request)}
                                     >
                                       <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-900">
-                                          {request.title}
-                                        </p>
+                                        <div className="flex items-center space-x-2">
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {request.title}
+                                          </p>
+                                          {request.type === 'business_relationship' && (
+                                            <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                              Business
+                                            </span>
+                                          )}
+                                          {request.type === 'contact_request' && (
+                                            <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                              Request
+                                            </span>
+                                          )}
+                                        </div>
                                         <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
                                           <Clock size={12} />
                                           <span>{formatDate(request.created_at)}</span>
@@ -266,9 +285,21 @@ const NewChatModal = ({ isOpen, onClose, onChatCreated }) => {
                                         onClick={() => handleCreateChat(item, request)}
                                       >
                                         <div className="flex-1">
-                                          <p className="text-sm font-medium text-gray-900">
-                                            {request.title}
-                                          </p>
+                                          <div className="flex items-center space-x-2">
+                                            <p className="text-sm font-medium text-gray-900">
+                                              {request.title}
+                                            </p>
+                                            {request.type === 'business_relationship' && (
+                                              <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                                Business
+                                              </span>
+                                            )}
+                                            {request.type === 'contact_request' && (
+                                              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                                Request
+                                              </span>
+                                            )}
+                                          </div>
                                           <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
                                             <Clock size={12} />
                                             <span>{formatDate(request.created_at)}</span>

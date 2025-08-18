@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building, Plus, Edit, Trash2, Eye, EyeOff, Globe, 
-  MapPin, Calendar, Users, CheckCircle, XCircle
+  MapPin, Calendar, Users, CheckCircle, XCircle, TrendingUp, 
+  TrendingDown, Activity, DollarSign, Package, Clock, Star,
+  BarChart3, Target, Zap, ShoppingBag
 } from 'lucide-react';
 import { colors } from '../../constants/theme';
 import api from '../../services/authService';
@@ -24,6 +26,7 @@ const BusinessManager = () => {
     is_public: true
   });
   const [userProfile, setUserProfile] = useState(null);
+  const [businessStats, setBusinessStats] = useState({});
   
   // New state for modal components
   const [newBusiness, setNewBusiness] = useState({
@@ -53,12 +56,92 @@ const BusinessManager = () => {
         updated_at: business.updated_at || business.modified_date || new Date().toISOString()
       }));
       setBusinesses(businessesData);
+      
+      // Fetch stats for each business
+      await fetchBusinessStats(businessesData);
     } catch (error) {
       console.error('Error fetching businesses:', error);
       setBusinesses([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchBusinessStats = async (businessesData) => {
+    const stats = {};
+    
+    for (const business of businessesData) {
+      try {
+        // Fetch orders for this business
+        const ordersResponse = await api.get(`/management/customer/orders/?business=${business.id}`);
+        const orders = ordersResponse.data;
+        
+        // Fetch products for this business
+        const productsResponse = await api.get(`/management/products/?business=${business.id}`);
+        const products = productsResponse.data;
+        
+        // Fetch invoices for this business
+        const invoicesResponse = await api.get(`/management/invoices/?business=${business.id}`);
+        const invoices = invoicesResponse.data;
+        
+        // Calculate stats
+        const totalOrders = orders.length;
+        const completedOrders = orders.filter(order => order.status === 'completed').length;
+        
+        // Calculate revenue from PAID customer invoices (money customer spent)
+        const paidInvoices = invoices.filter(invoice => 
+          invoice.status?.toLowerCase() === 'paid' && 
+          invoice.invoice_type === 'customer'
+        );
+        const totalRevenue = paidInvoices.reduce((sum, invoice) => {
+          const totalAmount = parseFloat(invoice.total_amount) || 0;
+          return sum + totalAmount;
+        }, 0);
+        
+        // Debug logging for revenue calculation
+        console.log(`Business ${business.business_name} customer revenue calculation:`, {
+          businessId: business.id,
+          totalRevenue,
+          invoicesCount: invoices.length,
+          paidCustomerInvoicesCount: paidInvoices.length,
+          paidInvoices: paidInvoices.map(inv => ({ 
+            id: inv.id, 
+            total_amount: inv.total_amount, 
+            amount: inv.amount, 
+            value: inv.value,
+            status: inv.status,
+            invoice_type: inv.invoice_type
+          }))
+        });
+        
+        const totalProducts = products.length;
+        const lastOrderDate = orders.length > 0 ? new Date(Math.max(...orders.map(o => new Date(o.created_at)))) : null;
+        const daysSinceLastOrder = lastOrderDate ? Math.floor((new Date() - lastOrderDate) / (1000 * 60 * 60 * 24)) : null;
+        
+        stats[business.id] = {
+          totalOrders,
+          completedOrders,
+          totalRevenue,
+          totalProducts,
+          lastOrderDate,
+          daysSinceLastOrder,
+          orderCompletionRate: totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0
+        };
+      } catch (error) {
+        console.warn(`Error fetching stats for business ${business.id}:`, error);
+        stats[business.id] = {
+          totalOrders: 0,
+          completedOrders: 0,
+          totalRevenue: 0,
+          totalProducts: 0,
+          lastOrderDate: null,
+          daysSinceLastOrder: null,
+          orderCompletionRate: 0
+        };
+      }
+    }
+    
+    setBusinessStats(stats);
   };
 
   const fetchUserProfile = async () => {
@@ -233,180 +316,263 @@ const BusinessManager = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="min-h-screen" style={{ backgroundColor: colors.background }}>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-blue-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: colors.textPrimary }}>
-            My Businesses
-          </h1>
-          <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-            Manage your business profiles and visibility settings
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Business
-        </button>
-      </div>
-
-      {/* Business Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {businesses.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <Building className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No businesses found
-            </h3>
-            <p className="text-gray-500 mb-4">
-              Get started by adding your first business profile
-            </p>
-            <button
+    <div className="min-h-screen" style={{ backgroundColor: colors.background }}>
+      {/* Header Section */}
+      <div className="relative overflow-hidden rounded-xl mb-6" style={{ backgroundColor: colors.primary }}>
+        <div className="absolute inset-0 bg-black opacity-10"></div>
+        <div className="relative p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-white">
+              <h1 className="text-2xl font-bold mb-1">My Businesses</h1>
+              <p className="text-blue-100 text-sm">
+                Manage your business profiles and track performance
+              </p>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setShowAddModal(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+              className="flex items-center px-4 py-2 bg-white text-gray-800 rounded-lg hover:bg-blue-50 transition-all duration-200 font-medium shadow-lg"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Add Your First Business
-            </button>
+              Add Business
+            </motion.button>
           </div>
-        ) : (
-          businesses.map((business, index) => (
-            <motion.div
-              key={business.id}
+        </div>
+      </div>
+
+      {/* Business Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        {businesses.length === 0 ? (
+          <div className="col-span-full">
+            <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+              className="text-center py-12 px-6 bg-white rounded-xl shadow-lg"
             >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                                         <h3 className="font-semibold text-gray-900 mb-1">
-                       {business.business_name} {business.slogan && `(${business.slogan})`}
-                     </h3>
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span className="flex items-center">
-                        <MapPin className="w-3 h-3 mr-1" />
-                        {business.location}
-                      </span>
-                      <span className="flex items-center">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {business.created_at ? new Date(business.created_at).toLocaleDateString() : 'Date not available'}
-                      </span>
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.secondary }}>
+                <Building className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold mb-2" style={{ color: colors.textPrimary }}>
+                No businesses found
+              </h3>
+              <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
+                Get started by adding your first business profile
+              </p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center px-4 py-2 mx-auto rounded-lg font-medium transition-all duration-200 shadow-lg"
+                style={{ backgroundColor: colors.primary, color: 'white' }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First Business
+              </motion.button>
+            </motion.div>
+          </div>
+        ) : (
+          businesses.map((business, index) => {
+            const stats = businessStats[business.id] || {};
+            return (
+              <motion.div
+                key={business.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ y: -4, scale: 1.01 }}
+                className="group relative bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden"
+              >
+                {/* Header Bar */}
+                <div className="h-1" style={{ backgroundColor: colors.primary }}></div>
+                
+                <div className="p-4">
+                  {/* Business Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center mb-1">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center mr-2" style={{ backgroundColor: colors.secondary }}>
+                          <Building className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-sm" style={{ color: colors.textPrimary }}>
+                            {business.business_name}
+                          </h3>
+                          {business.slogan && (
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>
+                              {business.slogan}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3 text-xs" style={{ color: colors.textSecondary }}>
+                        <span className="flex items-center">
+                          <MapPin className="w-3 h-3 mr-1" />
+                          {business.location}
+                        </span>
+                        <span className="flex items-center">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {business.created_at ? new Date(business.created_at).toLocaleDateString() : 'Date not available'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
+                    
+                    {/* Visibility Toggle */}
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => handleToggleVisibility(business.id, business.is_public)}
-                      className={`p-2 rounded-full transition-colors ${
+                      className={`p-1.5 rounded-full transition-all duration-200 ${
                         business.is_public 
                           ? 'bg-green-100 text-green-600 hover:bg-green-200' 
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                       title={business.is_public ? 'Public' : 'Private'}
                     >
-                      {business.is_public ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
+                      {business.is_public ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    </motion.button>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      business.is_public 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {business.is_public ? (
-                        <>
-                          <Globe className="w-3 h-3 mr-1" />
-                          Public
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff className="w-3 h-3 mr-1" />
-                          Private
-                        </>
-                      )}
-                    </span>
+                  {/* Business Stats - Compact */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="text-center p-2 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center justify-center mb-1">
+                        <Package className="w-3 h-3 mr-1" style={{ color: colors.primary }} />
+                        <span className="text-sm font-bold" style={{ color: colors.textPrimary }}>
+                          {stats.totalProducts || 0}
+                        </span>
+                      </div>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>Products</p>
+                    </div>
+                    
+                    <div className="text-center p-2 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center justify-center mb-1">
+                        <ShoppingBag className="w-3 h-3 mr-1" style={{ color: colors.success }} />
+                        <span className="text-sm font-bold" style={{ color: colors.textPrimary }}>
+                          {stats.totalOrders || 0}
+                        </span>
+                      </div>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>Orders</p>
+                    </div>
+                    
+                    <div className="text-center p-2 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center justify-center mb-1">
+                        <DollarSign className="w-3 h-3 mr-1" style={{ color: colors.warning }} />
+                        <span className="text-sm font-bold" style={{ color: colors.textPrimary }}>
+                          ${(stats.totalRevenue || 0).toFixed(0)}
+                        </span>
+                      </div>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>Revenue</p>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => navigate(`/manage/customer/${business.id}`)}
-                      className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-colors"
-                      title="Manage Dashboard"
-                    >
-                      Manage
-                    </button>
-                    <button
-                      onClick={() => openEditModal(business)}
-                      className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="Edit"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => openDeleteModal(business)}
-                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                  {/* Status and Actions */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        business.is_public 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {business.is_public ? (
+                          <>
+                            <Globe className="w-3 h-3 mr-1" />
+                            Public
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-3 h-3 mr-1" />
+                            Private
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center space-x-1">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => navigate(`/manage/customer/${business.id}`)}
+                        className="px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 shadow-sm"
+                        style={{ 
+                          backgroundColor: colors.primary,
+                          color: 'white'
+                        }}
+                        title="Manage Dashboard"
+                      >
+                        Manage
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => openEditModal(business)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Edit"
+                      >
+                        <Edit className="w-3 h-3" />
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => openDeleteModal(business)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </motion.button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          ))
+              </motion.div>
+            );
+          })
         )}
       </div>
 
-             {/* Add Business Modal */}
-       <AnimatePresence>
-         {showAddModal && (
-           <AddBusinessModal
-             showAddModal={showAddModal}
-             setShowAddModal={setShowAddModal}
-             newBusiness={newBusiness}
-             setNewBusiness={setNewBusiness}
-             errors={errors}
-             setErrors={setErrors}
-             isSubmitting={isSubmitting}
-             handleAddBusiness={handleAddBusiness}
-             colors={colors}
-           />
-         )}
-       </AnimatePresence>
+      {/* Add Business Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <AddBusinessModal
+            showAddModal={showAddModal}
+            setShowAddModal={setShowAddModal}
+            newBusiness={newBusiness}
+            setNewBusiness={setNewBusiness}
+            errors={errors}
+            setErrors={setErrors}
+            isSubmitting={isSubmitting}
+            handleAddBusiness={handleAddBusiness}
+            colors={colors}
+          />
+        )}
+      </AnimatePresence>
 
-             {/* Edit Business Modal */}
-       <AnimatePresence>
-         {showEditModal && selectedBusiness && (
-           <EditBusinessModal
-             showEditModal={showEditModal}
-             setShowEditModal={setShowEditModal}
-             editBusiness={editBusiness}
-             setEditBusiness={setEditBusiness}
-             errors={errors}
-             setErrors={setErrors}
-             isSubmitting={isSubmitting}
-             handleEditBusiness={handleEditBusiness}
-             selectedBusiness={selectedBusiness}
-             colors={colors}
-           />
-         )}
-       </AnimatePresence>
+      {/* Edit Business Modal */}
+      <AnimatePresence>
+        {showEditModal && selectedBusiness && (
+          <EditBusinessModal
+            showEditModal={showEditModal}
+            setShowEditModal={setShowEditModal}
+            editBusiness={editBusiness}
+            setEditBusiness={setEditBusiness}
+            errors={errors}
+            setErrors={setErrors}
+            isSubmitting={isSubmitting}
+            handleEditBusiness={handleEditBusiness}
+            selectedBusiness={selectedBusiness}
+            colors={colors}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
@@ -421,25 +587,36 @@ const BusinessManager = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
             >
-              <h2 className="text-xl font-semibold mb-4">Delete Business</h2>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete "{selectedBusiness.business_name}"? This action cannot be undone.
-              </p>
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-red-100">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <h2 className="text-xl font-bold mb-2" style={{ color: colors.textPrimary }}>
+                  Delete Business
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to delete "{selectedBusiness.business_name}"? This action cannot be undone.
+                </p>
+              </div>
               <div className="flex justify-end space-x-3">
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => setShowDeleteModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
                 >
                   Cancel
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handleDeleteBusiness}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                 >
                   Delete
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>

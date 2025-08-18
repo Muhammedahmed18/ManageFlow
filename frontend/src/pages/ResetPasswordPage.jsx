@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resetPassword } from '../services/authService';
-import { Lock, Key, ArrowLeft, Loader2 } from 'lucide-react';
+import { Lock, Key, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -12,6 +12,8 @@ const ResetPasswordPage = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const navigate = useNavigate();
 
@@ -189,18 +191,36 @@ const ResetPasswordPage = () => {
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ color: colors.textLighter }} />
               <input
-                type="password"
+                type={showNewPassword ? "text" : "password"}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Enter new password"
                 required
                 minLength="8"
-                className="w-full pl-10 pr-4 py-3 bg-white rounded-lg border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+                className="w-full pl-10 pr-12 py-3 bg-white rounded-lg border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
                 style={{ 
                   borderColor: colors.border,
                   color: colors.text
                 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors z-10"
+                style={{ 
+                  color: colors.textLighter,
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '32px',
+                  minHeight: '32px'
+                }}
+              >
+                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
@@ -209,18 +229,36 @@ const ResetPasswordPage = () => {
             <div className="relative">
               <Key className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ color: colors.textLighter }} />
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
                 required
                 minLength="8"
-                className="w-full pl-10 pr-4 py-3 bg-white rounded-lg border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+                className="w-full pl-10 pr-12 py-3 bg-white rounded-lg border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
                 style={{ 
                   borderColor: colors.border,
                   color: colors.text
                 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors z-10"
+                style={{ 
+                  color: colors.textLighter,
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '32px',
+                  minHeight: '32px'
+                }}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 

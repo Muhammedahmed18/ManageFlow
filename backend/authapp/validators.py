@@ -23,15 +23,33 @@ class EmailValidator:
         if not re.match(email_pattern, email):
             raise ValidationError(_('Enter a valid email address.'))
         
-        # Check for common disposable email domains
-        disposable_domains = [
-            '10minutemail.com', 'guerrillamail.com', 'mailinator.com',
-            'tempmail.org', 'throwaway.email', 'temp-mail.org'
+        # Allowed email domains
+        allowed_domains = [
+            'gmail.com',
+            'outlook.com',
+            'hotmail.com',
+            'yahoo.com',
+            'yahoo.co.uk',
+            'yahoo.ca',
+            'aol.com',
+            'icloud.com',
+            'me.com',
+            'mac.com',
+            'protonmail.com',
+            'tutanota.com',
+            'zoho.com',
+            'yandex.com',
+            'mail.com',
+            'live.com',
+            'msn.com',
+            'rocketmail.com',
+            'gmx.com',
+            'fastmail.com'
         ]
         
         domain = email.split('@')[1].lower()
-        if domain in disposable_domains:
-            raise ValidationError(_('Disposable email addresses are not allowed.'))
+        if domain not in allowed_domains:
+            raise ValidationError(_('Please use a supported email provider (Gmail, Outlook, Yahoo, etc.).'))
         
         return email
 

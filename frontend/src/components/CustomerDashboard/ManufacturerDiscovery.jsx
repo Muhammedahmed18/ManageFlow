@@ -66,12 +66,15 @@ const ManufacturerDiscovery = () => {
       
       // Process the response to extract joined manufacturers
       if (response.data.approved_manufacturer) {
+        const manufacturer = response.data.approved_manufacturer;
+        const fullName = `${manufacturer.first_name || ''} ${manufacturer.last_name || ''}`.trim() || manufacturer.username || 'Unknown Manufacturer';
+        
         joinedData.push({
-          id: response.data.approved_manufacturer.id,
-          business_name: response.data.approved_manufacturer.username || 'Unknown Manufacturer',
+          id: manufacturer.id,
+          business_name: fullName,
           description: 'Approved manufacturer for this business',
-          location: response.data.approved_manufacturer.location || response.data.approved_manufacturer.company_name || 'Global',
-          industry: response.data.approved_manufacturer.company_name || 'General Manufacturing',
+          location: manufacturer.location || manufacturer.company_name || 'Global',
+          industry: manufacturer.company_name || 'General Manufacturing',
           status: 'approved',
           business_name_joined: response.data.business_name,
           joined_date: new Date().toISOString(),
@@ -82,9 +85,11 @@ const ManufacturerDiscovery = () => {
       // Add pending manufacturers
       if (response.data.pending_manufacturers) {
         response.data.pending_manufacturers.forEach(manufacturer => {
+          const fullName = `${manufacturer.first_name || ''} ${manufacturer.last_name || ''}`.trim() || manufacturer.username || 'Unknown Manufacturer';
+          
           joinedData.push({
             id: manufacturer.id,
-            business_name: manufacturer.username || 'Unknown Manufacturer',
+            business_name: fullName,
             description: 'Pending approval for this business',
             location: manufacturer.location || manufacturer.company_name || 'Global',
             industry: manufacturer.company_name || 'General Manufacturing',

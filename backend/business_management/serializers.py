@@ -403,6 +403,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class BusinessSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
+    manufacturer = serializers.SerializerMethodField()
     
     class Meta:
         model = Business
@@ -410,6 +412,32 @@ class BusinessSerializer(serializers.ModelSerializer):
             'id', 'name', 'slogan', 'invite_code', 'owner', 'manufacturer', 'status', 'is_public'
         ]
         read_only_fields = ['id', 'invite_code', 'owner', 'manufacturer', 'status']
+    
+    def get_owner(self, obj):
+        """Return owner information as nested object"""
+        if obj.owner:
+            return {
+                'id': obj.owner.id,
+                'username': obj.owner.username,
+                'first_name': obj.owner.first_name,
+                'last_name': obj.owner.last_name,
+                'email': obj.owner.email,
+                'company_name': obj.owner.company_name
+            }
+        return None
+    
+    def get_manufacturer(self, obj):
+        """Return manufacturer information as nested object"""
+        if obj.manufacturer:
+            return {
+                'id': obj.manufacturer.id,
+                'username': obj.manufacturer.username,
+                'first_name': obj.manufacturer.first_name,
+                'last_name': obj.manufacturer.last_name,
+                'email': obj.manufacturer.email,
+                'company_name': obj.manufacturer.company_name
+            }
+        return None
     
     def get_status(self, obj):
         """Determine the status of the business relationship for the current user"""

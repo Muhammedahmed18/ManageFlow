@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Dashboard from './Dashboard';
@@ -7,7 +8,7 @@ import OrderManagement from './OrderManagement';
 import InvoiceManagement from './InvoiceManagement';
 import ProductManagement from './ProductManagement';
 import Settings from './Settings';
-import AIPredictionDashboard from './AIPredictionDashboard';
+import AIDashboard from './AIDashboard';
 import ProductPreviewModal from '../CustomerManager/modals/ProductPreviewModal';
 import InvoiceCreator from './modals/InvoiceCreator';
 
@@ -17,6 +18,7 @@ import api from '../../services/authService';
 const BusinessManager = () => {
   const { businessId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [productSubTab, setProductSubTab] = useState("products");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -272,6 +274,7 @@ const BusinessManager = () => {
         productSubTab={productSubTab}
         setProductSubTab={setProductSubTab}
         colors={colors}
+        currentUser={currentUser}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -345,8 +348,8 @@ const BusinessManager = () => {
 
 
 
-        {activeTab === "predictions" && (
-          <AIPredictionDashboard businessId={businessId} colors={colors} />
+        {activeTab === "ai-dashboard" && (
+          <AIDashboard businessId={businessId} colors={colors} />
         )}
 
         {activeTab === "settings" && (

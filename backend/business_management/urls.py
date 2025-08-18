@@ -57,7 +57,7 @@ from .views import (
     JoinBusinessView,
 )
 from .advanced_views import AdvancedDashboardViewSet, AdvancedSearchViewSet, ReportViewSet
-from .prediction_views import PredictionDashboardView, GeneratePredictionView, ProductConfidenceView
+from .prediction_views import PredictionDashboardView, GeneratePredictionView, ProductConfidenceView, GrowthDataView, DebugOrdersView, MLForecastView, AnomalyDetectionView
 from .customer_performance_views import CustomerPerformanceView, CustomerOrderAnalyticsView, CustomerSpendingInsightsView, CustomerRevenueTrendsView, CustomerRevenueForecastView, CustomerRevenueInsightsView, GenerateRealInsightsView
 from business.views import CustomerBusinessDetail
 from django.conf import settings
@@ -152,6 +152,11 @@ path('manufacturer/join-business/', JoinBusinessView.as_view()),
     path('predictions/<int:business_id>/dashboard/', PredictionDashboardView.as_view(), name='prediction_dashboard'),
     path('predictions/<int:business_id>/generate/', GeneratePredictionView.as_view(), name='generate_prediction'),
     path('predictions/<int:business_id>/product/<int:product_id>/confidence/', ProductConfidenceView.as_view(), name='product_confidence'),
+    path('predictions/<int:business_id>/growth/', GrowthDataView.as_view(), name='growth_data'),
+    path('predictions/<int:business_id>/debug-orders/', DebugOrdersView.as_view(), name='debug_orders'),
+    path('predictions/<int:business_id>/ml-forecast/', MLForecastView.as_view(), name='ml_forecast'),
+
+    path('predictions/<int:business_id>/anomaly-detection/', AnomalyDetectionView.as_view(), name='anomaly_detection'),
 
     # Customer Performance API
     path('customer/performance/<int:business_id>/', CustomerPerformanceView.as_view(), name='customer_performance'),

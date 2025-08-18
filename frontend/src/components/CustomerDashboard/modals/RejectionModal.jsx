@@ -15,7 +15,7 @@ const RejectionModal = ({ isOpen, onClose, onReject, manufacturerName }) => {
     try {
       await onReject(rejectionReason);
       setRejectionReason('');
-      onClose();
+      // onClose() is now handled in the parent component after successful API call
     } catch (error) {
       console.error('Error rejecting request:', error);
     } finally {
@@ -101,4 +101,6 @@ const RejectionModal = ({ isOpen, onClose, onReject, manufacturerName }) => {
 };
 
 export default RejectionModal;
+
+
 

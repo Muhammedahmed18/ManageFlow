@@ -25,6 +25,7 @@ const Sidebar = ({
   };
   const navItems = [
     { id: 'overview', label: 'Overview', icon: Home, badge: null },
+    { id: 'businesses', label: 'My Businesses', icon: Factory, badge: null },
     { id: 'requests', label: 'My Requests', icon: FileText, badge: requestStats?.pending_requests || 0 },
     { id: 'discover', label: 'Discover Customers', icon: Users, badge: null },
     { id: 'proposals', label: 'Proposals', icon: TrendingUp, badge: null },

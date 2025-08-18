@@ -17,7 +17,7 @@ const Sidebar = ({
   const navItems = [
     { 
       id: 'overview', 
-      label: 'Dashboard', 
+      label: 'Overview', 
       icon: Home, 
       badge: null 
     },
@@ -72,7 +72,7 @@ const Sidebar = ({
           {!sidebarCollapsed && (
             <div>
               <h1 className="text-lg font-bold text-white">Customer</h1>
-              <p className="text-xs text-white opacity-70">Dashboard</p>
+              <p className="text-xs text-white opacity-70">Overview</p>
             </div>
           )}
         </div>

@@ -27,6 +27,7 @@ const Header = ({
       case 'customers': return 'Customers';
       case 'analytics': return 'Analytics';
       case 'predictions': return 'AI Predictions';
+      case 'ai-dashboard': return 'AI Business Intelligence';
       case 'settings': return 'Settings';
       default: return 'Dashboard';
     }
@@ -46,6 +47,7 @@ const Header = ({
       case 'customers': return 'View and manage your customers';
       case 'analytics': return 'Track your business performance';
       case 'predictions': return 'Business Intelligence & Analytics Dashboard';
+      case 'ai-dashboard': return 'Advanced analytics powered by machine learning';
       case 'settings': return 'Configure your settings';
       default: return 'Welcome back!';
     }

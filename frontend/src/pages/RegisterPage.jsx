@@ -65,12 +65,44 @@ const RegisterPage = () => {
     if (errors[name] || errors.general) {
       setErrors({ ...errors, [name]: "", general: "" });
     }
+
+    // Real-time email domain validation
+    if (name === 'email' && value.trim()) {
+      const emailDomain = value.split('@')[1]?.toLowerCase();
+      if (emailDomain && !allowedEmailDomains.includes(emailDomain)) {
+        setErrors({ ...errors, email: "Please use a supported email provider (Gmail, Outlook, Yahoo, etc.)" });
+      }
+    }
   };
 
   const handleRoleChange = (selectedRole) => {
     setFormData({ ...formData, role: selectedRole });
     setErrors({ username: "", email: "", password: "", general: "", first_name: "", last_name: "" });
   };
+
+  // Allowed email domains
+  const allowedEmailDomains = [
+    'gmail.com',
+    'outlook.com',
+    'hotmail.com',
+    'yahoo.com',
+    'yahoo.co.uk',
+    'yahoo.ca',
+    'aol.com',
+    'icloud.com',
+    'me.com',
+    'mac.com',
+    'protonmail.com',
+    'tutanota.com',
+    'zoho.com',
+    'yandex.com',
+    'mail.com',
+    'live.com',
+    'msn.com',
+    'rocketmail.com',
+    'gmx.com',
+    'fastmail.com'
+  ];
 
   const validateForm = () => {
     let isValid = true;
@@ -102,6 +134,13 @@ const RegisterPage = () => {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
       isValid = false;
+    } else {
+      // Check if email domain is allowed
+      const emailDomain = formData.email.split('@')[1].toLowerCase();
+      if (!allowedEmailDomains.includes(emailDomain)) {
+        newErrors.email = "Please use a supported email provider (Gmail, Outlook, Yahoo, etc.)";
+        isValid = false;
+      }
     }
 
     if (!formData.password) {
@@ -481,8 +520,18 @@ const RegisterPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors"
-                  style={{ color: colors.textSecondary }}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors z-10"
+                  style={{ 
+                    color: colors.textSecondary,
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '32px',
+                    minHeight: '32px'
+                  }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>

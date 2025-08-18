@@ -4,7 +4,7 @@ from .views import (
     VerifyOTPView, ResendRegistrationOTPView, 
     SendResetOTPView, ResetPasswordView, DeleteAccountView,
     UserSettingsView, PrivacySettingsView, BusinessSettingsView,
-    user_profile, SendRegistrationOTPView
+    user_profile, SendRegistrationOTPView, verify_password, delete_account
 )
 
 urlpatterns = [
@@ -18,7 +18,8 @@ urlpatterns = [
     path('resend-otp/', ResendRegistrationOTPView.as_view(), name='resend-otp'),
     path('send-reset-otp/', SendResetOTPView.as_view(), name='send-reset-otp'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
-    path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
+    path('verify-password/', verify_password, name='verify-password'),
+    path('delete-account/', delete_account, name='delete-account'),
     
     # User Settings endpoints
     path('settings/', UserSettingsView.as_view(), name='user-settings'),

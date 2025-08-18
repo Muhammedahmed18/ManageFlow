@@ -66,6 +66,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    role = serializers.CharField(required=False, allow_blank=True)
+    
     def validate(self, attrs):
         username = attrs.get("username")
         password = attrs.get("password")

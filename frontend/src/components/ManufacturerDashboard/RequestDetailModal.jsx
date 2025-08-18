@@ -92,8 +92,8 @@ const RequestDetailModal = ({
             {/* Header */}
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
-                  {request.direction === 'outgoing' ? <ArrowRight size={20} style={{ color: colors.primary }} /> : <ArrowLeft size={20} style={{ color: colors.primary }} />}
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                  {request.direction === 'outgoing' ? <ArrowRight size={24} style={{ color: colors.primary }} /> : <ArrowLeft size={24} style={{ color: colors.primary }} />}
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>
@@ -126,20 +126,24 @@ const RequestDetailModal = ({
               {/* Request Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {/* Customer Information */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg" style={{ color: colors.textPrimary }}>
+                <div className="p-4 rounded-lg border" style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}>
+                  <h3 className="font-semibold text-lg mb-4" style={{ color: colors.textPrimary }}>
                     Customer Information
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="flex items-center space-x-3">
-                      <User size={16} style={{ color: colors.textSecondary }} />
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                        <User size={16} style={{ color: colors.primary }} />
+                      </div>
                       <div>
                         <p className="font-medium" style={{ color: colors.textPrimary }}>{request.customer_name}</p>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>Customer</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <Mail size={16} style={{ color: colors.textSecondary }} />
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.accent + '20' }}>
+                        <Mail size={16} style={{ color: colors.accent }} />
+                      </div>
                       <div>
                         <p className="font-medium" style={{ color: colors.textPrimary }}>{request.customer_email}</p>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>Email</p>
@@ -147,7 +151,9 @@ const RequestDetailModal = ({
                     </div>
                     {request.customer_location && (
                       <div className="flex items-center space-x-3">
-                        <MapPin size={16} style={{ color: colors.textSecondary }} />
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.success + '20' }}>
+                          <MapPin size={16} style={{ color: colors.success }} />
+                        </div>
                         <div>
                           <p className="font-medium" style={{ color: colors.textPrimary }}>{request.customer_location}</p>
                           <p className="text-sm" style={{ color: colors.textSecondary }}>Location</p>
@@ -158,13 +164,15 @@ const RequestDetailModal = ({
                 </div>
 
                 {/* Business Information */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg" style={{ color: colors.textPrimary }}>
+                <div className="p-4 rounded-lg border" style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}>
+                  <h3 className="font-semibold text-lg mb-4" style={{ color: colors.textPrimary }}>
                     Business Information
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="flex items-center space-x-3">
-                      <Building size={16} style={{ color: colors.textSecondary }} />
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.warning + '20' }}>
+                        <Building size={16} style={{ color: colors.warning }} />
+                      </div>
                       <div>
                         <p className="font-medium" style={{ color: colors.textPrimary }}>{request.business_name}</p>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>Business</p>
@@ -172,7 +180,9 @@ const RequestDetailModal = ({
                     </div>
                     {request.business_slogan && (
                       <div className="flex items-center space-x-3">
-                        <FileText size={16} style={{ color: colors.textSecondary }} />
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                          <FileText size={16} style={{ color: colors.primary }} />
+                        </div>
                         <div>
                           <p className="font-medium" style={{ color: colors.textPrimary }}>{request.business_slogan}</p>
                           <p className="text-sm" style={{ color: colors.textSecondary }}>Slogan</p>
@@ -189,30 +199,46 @@ const RequestDetailModal = ({
                   Request Message
                 </h3>
                 <div className="p-4 rounded-lg border" style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}>
-                  <p className="whitespace-pre-wrap" style={{ color: colors.textPrimary }}>
-                    {request.message}
-                  </p>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center mt-1" style={{ backgroundColor: colors.accent + '20' }}>
+                      <MessageSquare size={16} style={{ color: colors.accent }} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="whitespace-pre-wrap leading-relaxed" style={{ color: colors.textPrimary }}>
+                        {request.message}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Timestamps */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="flex items-center space-x-3">
-                  <Clock size={16} style={{ color: colors.textSecondary }} />
-                  <div>
-                    <p className="font-medium" style={{ color: colors.textPrimary }}>{formatDate(request.created_at)}</p>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>Created</p>
-                  </div>
-                </div>
-                {request.responded_at && (
+              <div className="p-4 rounded-lg border mb-6" style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}>
+                <h3 className="font-semibold text-lg mb-4" style={{ color: colors.textPrimary }}>
+                  Timeline
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center space-x-3">
-                    <MessageSquare size={16} style={{ color: colors.textSecondary }} />
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                      <Clock size={16} style={{ color: colors.primary }} />
+                    </div>
                     <div>
-                      <p className="font-medium" style={{ color: colors.textPrimary }}>{formatDate(request.responded_at)}</p>
-                      <p className="text-sm" style={{ color: colors.textSecondary }}>Responded</p>
+                      <p className="font-medium" style={{ color: colors.textPrimary }}>{formatDate(request.created_at)}</p>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>Request Created</p>
                     </div>
                   </div>
-                )}
+                  {request.responded_at && (
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.success + '20' }}>
+                        <MessageSquare size={16} style={{ color: colors.success }} />
+                      </div>
+                      <div>
+                        <p className="font-medium" style={{ color: colors.textPrimary }}>{formatDate(request.responded_at)}</p>
+                        <p className="text-sm" style={{ color: colors.textSecondary }}>Response Sent</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Customer Response (if any) */}
@@ -222,9 +248,16 @@ const RequestDetailModal = ({
                     Customer Response
                   </h3>
                   <div className="p-4 rounded-lg border" style={{ backgroundColor: colors.cardBg, borderColor: colors.border }}>
-                    <p className="whitespace-pre-wrap" style={{ color: colors.textPrimary }}>
-                      {request.customer_response}
-                    </p>
+                    <div className="flex items-start space-x-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center mt-1" style={{ backgroundColor: colors.success + '20' }}>
+                        <Reply size={16} style={{ color: colors.success }} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="whitespace-pre-wrap leading-relaxed" style={{ color: colors.textPrimary }}>
+                          {request.customer_response}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

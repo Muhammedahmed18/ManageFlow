@@ -24,38 +24,37 @@ const Dashboard = ({ products = [], customers = [], orders = [], invoices = [], 
   })));
   console.log('Dashboard: Paid invoices:', invoicesArray.filter(inv => inv.status === 'paid'));
   
-  // Calculate total revenue from PAID invoices only
+  // Calculate total revenue from PAID manufacturer invoices only (money manufacturer earned)
   const totalRevenue = invoicesArray
     .filter(invoice => {
-      // Only include invoices with status 'paid' (case-insensitive)
+      // Only include manufacturer invoices with status 'paid' (case-insensitive)
       const status = invoice.status?.toLowerCase();
       const isPaid = status === 'paid';
-      console.log(`Invoice ${invoice.id} status check:`, { original: invoice.status, normalized: status, isPaid });
-      return isPaid;
+      const isManufacturerInvoice = invoice.invoice_type === 'manufacturer';
+      console.log(`Invoice ${invoice.id} status check:`, { 
+        original: invoice.status, 
+        normalized: status, 
+        isPaid, 
+        invoice_type: invoice.invoice_type,
+        isManufacturerInvoice 
+      });
+      return isPaid && isManufacturerInvoice;
     })
     .reduce((sum, invoice) => {
-      // Try multiple possible amount fields with detailed logging
+      // Use only total_amount field for consistency
       const totalAmount = parseFloat(invoice.total_amount) || 0;
-      const amount = parseFloat(invoice.amount) || 0;
-      const value = parseFloat(invoice.value) || 0;
-      
-      // Use the highest non-zero value, or total_amount as priority
-      const finalAmount = totalAmount > 0 ? totalAmount : (amount > 0 ? amount : value);
       
       console.log(`Invoice ${invoice.id} amount calculation:`, {
         total_amount: totalAmount,
-        amount: amount,
-        value: value,
-        finalAmount: finalAmount,
-        field_used: totalAmount > 0 ? 'total_amount' : (amount > 0 ? 'amount' : 'value')
+        finalAmount: totalAmount
       });
       
-      return sum + finalAmount;
+      return sum + totalAmount;
     }, 0);
   
   console.log('Revenue calculation summary:', {
     totalRevenue,
-    paidInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid').length,
+    paidManufacturerInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid' && inv.invoice_type === 'manufacturer').length,
     allInvoicesCount: invoicesArray.length
   });
   
@@ -64,8 +63,13 @@ const Dashboard = ({ products = [], customers = [], orders = [], invoices = [], 
     totalRevenue,
     ordersCount: ordersArray.length,
     invoicesCount: invoicesArray.length,
-    paidInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid').length,
-    paidInvoices: invoicesArray.filter(inv => inv.status === 'paid').map(inv => ({ id: inv.id, amount: inv.total_amount, status: inv.status }))
+    paidManufacturerInvoicesCount: invoicesArray.filter(inv => inv.status === 'paid' && inv.invoice_type === 'manufacturer').length,
+    paidInvoices: invoicesArray.filter(inv => inv.status === 'paid' && inv.invoice_type === 'manufacturer').map(inv => ({ 
+      id: inv.id, 
+      amount: inv.total_amount, 
+      status: inv.status,
+      invoice_type: inv.invoice_type 
+    }))
   });
   
   // Get recent orders (last 5)

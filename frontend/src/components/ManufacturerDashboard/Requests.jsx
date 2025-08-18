@@ -17,13 +17,17 @@ const Requests = ({
   showRequestDetail,
   fetchRequestDetail,
   setShowRequestDetail,
-  getRequestStatusColor,
-  getRequestStatusIcon,
-  formatDate,
+  getStatusColor,
+  getStatusIcon,
   setActiveTab,
   refreshRequests,
   fetchIncomingRequests,
-  fetchIncomingRequestDetail
+  fetchIncomingRequestDetail,
+  searchQuery,
+  setSearchQuery,
+  statusFilter,
+  setStatusFilter,
+  loading
 }) => {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -33,6 +37,12 @@ const Requests = ({
   const [showRequestDetailModal, setShowRequestDetailModal] = useState(false);
   const [currentRequest, setCurrentRequest] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Format date helper function
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
 
   const requestTabs = [
     { id: 'my-requests', name: 'My Requests', icon: FileText },
@@ -46,6 +56,7 @@ const Requests = ({
       setIncomingRequestsLoading(true);
       try {
         const data = await fetchIncomingRequests();
+        console.log('Incoming requests data:', data);
         setIncomingRequests(data);
       } catch (error) {
         console.error('Error fetching incoming requests:', error);
@@ -144,6 +155,11 @@ const Requests = ({
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Debug logging */}
+      {console.log('Requests component - filteredRequests:', filteredRequests)}
+      {console.log('Requests component - loading:', requestsLoading)}
+      
+      {/* Header */}
       {/* Tab Navigation */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
@@ -311,150 +327,118 @@ const Requests = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredRequests.map((request) => (
-                <motion.div
-                  key={request.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-lg border p-6 hover:shadow-md transition-shadow"
-                  style={{ 
-                    backgroundColor: colors.cardBg,
-                    borderColor: colors.border 
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
-                        <ArrowRight size={20} style={{ color: colors.primary }} />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold" style={{ color: colors.textPrimary }}>
-                          {request.customer_name}
-                        </h4>
-                        <p className="text-sm" style={{ color: colors.textSecondary }}>
-                          Sent to customer
-                        </p>
-                      </div>
-                    </div>
-                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getRequestStatusColor(request.status)}`}>
-                      {getRequestStatusIcon(request.status)}
-                      <span>{request.status.charAt(0).toUpperCase() + request.status.slice(1)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-                    <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
-                      <Building size={14} />
-                      <span>Business: {request.business_name}</span>
-                    </div>
-                    <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
-                      <Clock size={14} />
-                      <span>Sent: {formatDate(request.created_at)}</span>
-                    </div>
-                    <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
-                      <FileText size={14} />
-                      <span>Request #{request.id}</span>
-                    </div>
-                  </div>
-
-                  {/* Message Preview */}
-                  <div className="mb-4">
-                    <p className="text-sm" style={{ color: colors.textPrimary }}>
-                      {request.message.length > 150 
-                        ? `${request.message.substring(0, 150)}...` 
-                        : request.message}
-                    </p>
-                  </div>
-
-                  {/* Business Information for Approved Requests */}
-                  {request.status === 'approved' && !request.is_joined && (
-                    <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor: colors.success + '10', borderColor: colors.success }}>
-                      <div className="flex items-center justify-between">
+              {(filteredRequests || []).length === 0 ? (
+                <div className="text-center py-16">
+                  <FileText size={48} className="mx-auto mb-4" style={{ color: colors.textSecondary }} />
+                  <h3 className="text-lg font-medium mb-2" style={{ color: colors.textPrimary }}>
+                    No requests found
+                  </h3>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    {(searchQuery || '') ? 'Try adjusting your search terms' : 'You haven\'t sent any requests yet. Start by discovering customers.'}
+                  </p>
+                </div>
+              ) : (
+                (filteredRequests || []).map((request) => (
+                  <motion.div
+                    key={request.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-lg border p-6 hover:shadow-md transition-shadow"
+                    style={{ 
+                      backgroundColor: colors.cardBg,
+                      borderColor: colors.border 
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                          <ArrowRight size={20} style={{ color: colors.primary }} />
+                        </div>
                         <div>
-                          <h4 className="font-medium text-sm" style={{ color: colors.success }}>
-                            Business Ready to Join
+                          <h4 className="font-semibold" style={{ color: colors.textPrimary }}>
+                            {request.customer_name}
                           </h4>
-                          <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                            {request.business_name} • Contact: {request.customer_name}
+                          <p className="text-sm" style={{ color: colors.textSecondary }}>
+                            Sent to customer
                           </p>
-                          <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                            Contact {request.customer_name} to get the invite code
-                          </p>
-                        </div>
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.success + '20' }}>
-                          <Check size={16} style={{ color: colors.success }} />
                         </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  {/* Business Information for Already Joined Businesses */}
-                  {request.status === 'approved' && request.is_joined && (
-                    <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor: colors.primary + '10', borderColor: colors.primary }}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-sm" style={{ color: colors.primary }}>
-                            Business Joined Successfully
-                          </h4>
-                          <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                            {request.business_name} • You are now managing this business
-                          </p>
-                          <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                            Access business management from your dashboard
-                          </p>
-                        </div>
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
-                          <Check size={16} style={{ color: colors.primary }} />
-                        </div>
+                      <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(request.status)}`}>
+                        {getStatusIcon(request.status)}
+                        <span>{request.status.charAt(0).toUpperCase() + request.status.slice(1)}</span>
                       </div>
                     </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="flex justify-end space-x-2">
-                    <button
-                      onClick={() => handleViewRequestDetails(request, false)}
-                      className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                      style={{ backgroundColor: colors.primary + '10', color: colors.primary }}
-                    >
-                      <Eye size={16} />
-                      <span>View Details</span>
-                    </button>
                     
-                    {/* Join Business Button for Approved Requests */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                      <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
+                        <Building size={14} />
+                        <span>Business: {request.business_name}</span>
+                      </div>
+                      <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
+                        <Clock size={14} />
+                        <span>Sent: {formatDate(request.created_at)}</span>
+                      </div>
+                      <div className="flex items-center space-x-2" style={{ color: colors.textSecondary }}>
+                        <FileText size={14} />
+                        <span>Request #{request.id}</span>
+                      </div>
+                    </div>
+
+                    {/* Message Preview */}
+                    <div className="mb-4">
+                      <p className="text-sm" style={{ color: colors.textPrimary }}>
+                        {request.message.length > 150 
+                          ? `${request.message.substring(0, 150)}...` 
+                          : request.message}
+                      </p>
+                    </div>
+
+                    {/* Business Information for Approved Requests */}
                     {request.status === 'approved' && !request.is_joined && (
-                      <button
-                        onClick={() => handleJoinBusiness(request)}
-                        className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                        style={{ backgroundColor: colors.success + '10', color: colors.success }}
-                      >
-                        <Building size={16} />
-                        <span>Join Business</span>
-                      </button>
-                    )}
-                    
-                    {/* Joined Status and Manage Button for Already Joined Businesses */}
-                    {request.status === 'approved' && request.is_joined && (
-                      <div className="flex items-center space-x-2">
-                        <div className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium"
-                          style={{ backgroundColor: colors.primary + '10', color: colors.primary }}
-                        >
-                          <Check size={16} />
-                          <span>Joined</span>
+                      <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor: colors.success + '10', borderColor: colors.success }}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-sm" style={{ color: colors.success }}>
+                              Business Ready to Join
+                            </h4>
+                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                              {request.business_name} • Contact: {request.customer_name}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                              Contact {request.customer_name} to get the invite code
+                            </p>
+                          </div>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.success + '20' }}>
+                            <Check size={16} style={{ color: colors.success }} />
+                          </div>
                         </div>
-                        <button
-                          onClick={() => handleManageBusiness(request)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                          style={{ backgroundColor: colors.accent + '10', color: colors.accent }}
-                        >
-                          <Building size={16} />
-                          <span>Manage</span>
-                        </button>
                       </div>
                     )}
-                  </div>
-                </motion.div>
-              ))}
+                    
+                    {/* Business Information for Already Joined Businesses */}
+                    {request.status === 'approved' && request.is_joined && (
+                      <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor: colors.primary + '10', borderColor: colors.primary }}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-sm" style={{ color: colors.primary }}>
+                              Business Joined Successfully
+                            </h4>
+                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                              {request.business_name} • You are now managing this business
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                              Access business management from your dashboard
+                            </p>
+                          </div>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                            <Check size={16} style={{ color: colors.primary }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -618,8 +602,8 @@ const Requests = ({
                         </p>
                       </div>
                     </div>
-                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getRequestStatusColor(request.status)}`}>
-                      {getRequestStatusIcon(request.status)}
+                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(request.status)}`}>
+                      {getStatusIcon(request.status)}
                       <span>{request.status.charAt(0).toUpperCase() + request.status.slice(1)}</span>
                     </div>
                   </div>

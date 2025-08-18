@@ -69,7 +69,6 @@ from .serializers import (
 )
 
 from authapp.models import User
-from business.models import Business  # Ensure correct model is used
 
 
 
@@ -111,7 +110,6 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Create category with automatic business assignment"""
-        from business.models import Business
         business = Business.objects.filter(owner=self.request.user).first()
         if not business:
             raise ValidationError("User has no associated business")
@@ -631,7 +629,7 @@ class ManufacturerBusinessListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Get businesses for manufacturer"""
+        """Get businesses for manufacturer with statistics"""
         user = request.user
         if user.role != "manufacturer":
             return Response({"detail": "Only manufacturers can access this endpoint."}, status=403)
@@ -655,10 +653,66 @@ class ManufacturerBusinessListView(APIView):
         # Get paginated results
         paginated_businesses = businesses[start:end]
         
+        # Calculate statistics for each business
+        business_stats = {}
+        for business in paginated_businesses:
+            try:
+                # Get orders for this business
+                orders = Order.objects.filter(business=business)
+                total_orders = orders.count()
+                completed_orders = orders.filter(status='completed').count()
+                
+                # Calculate revenue from PAID manufacturer invoices (money manufacturer earned)
+                invoices = Invoice.objects.filter(business=business)
+                paid_invoices = invoices.filter(status='paid', invoice_type='manufacturer')
+                
+                total_revenue = sum(
+                    float(invoice.total_amount or 0) 
+                    for invoice in paid_invoices
+                )
+                
+                # Debug logging for revenue calculation
+                print(f"Business {business.name} manufacturer revenue calculation:")
+                print(f"  - Total invoices: {invoices.count()}")
+                print(f"  - Paid manufacturer invoices: {paid_invoices.count()}")
+                print(f"  - Total revenue earned: ${total_revenue}")
+                print(f"  - Paid invoice details: {[(inv.id, inv.total_amount, inv.status, inv.invoice_type) for inv in paid_invoices]}")
+                
+                # Get products count
+                total_products = Product.objects.filter(business=business).count()
+                
+                # Get last order date
+                last_order = orders.order_by('-created_at').first()
+                last_order_date = last_order.created_at if last_order else None
+                
+                business_stats[business.id] = {
+                    'total_orders': total_orders,
+                    'completed_orders': completed_orders,
+                    'total_revenue': total_revenue,
+                    'total_products': total_products,
+                    'last_order_date': last_order_date,
+                    'order_completion_rate': (completed_orders / total_orders * 100) if total_orders > 0 else 0
+                }
+            except Exception as e:
+                print(f"Error calculating stats for business {business.id}: {e}")
+                business_stats[business.id] = {
+                    'total_orders': 0,
+                    'completed_orders': 0,
+                    'total_revenue': 0,
+                    'total_products': 0,
+                    'last_order_date': None,
+                    'order_completion_rate': 0
+                }
+        
         serializer = BusinessSerializer(paginated_businesses, many=True, context={'request': request})
+        serialized_data = serializer.data
+        
+        # Add stats to each business
+        for business_data in serialized_data:
+            business_data['stats'] = business_stats.get(business_data['id'], {})
         
         return Response({
-            'results': serializer.data,
+            'results': serialized_data,
             'count': total_count,
             'page': page,
             'limit': limit
@@ -2638,6 +2692,49 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
+    @action(detail=False, methods=['get'])
+    def get_or_create_for_business(self, request):
+        """Get or create chat room for a business relationship"""
+        try:
+            business_id = request.query_params.get('business_id')
+            if not business_id:
+                return Response({'error': 'business_id is required'}, status=400)
+            
+            business = Business.objects.get(id=business_id)
+            user = request.user
+            
+            # Check if user is the manufacturer of this business
+            if user != business.manufacturer:
+                return Response({'error': 'Access denied. Only the business manufacturer can create this chat.'}, status=403)
+            
+            # Check if business has an owner (customer)
+            if not business.owner:
+                return Response({'error': 'Business has no owner to chat with.'}, status=400)
+            
+            # Get or create chat room
+            chat_room, created = ChatRoom.objects.get_or_create(
+                customer=business.owner,
+                manufacturer=user,
+                business=business,
+                defaults={'is_active': True}
+            )
+            
+            # Get unread count
+            unread_count = chat_room.messages.filter(
+                is_read=False
+            ).exclude(sender=user).count()
+            
+            serializer = self.get_serializer(chat_room)
+            data = serializer.data
+            data['unread_count'] = unread_count
+            data['created'] = created
+            
+            return Response(data)
+        except Business.DoesNotExist:
+            return Response({'error': 'Business not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
 
 class ChatMessageViewSet(viewsets.ModelViewSet):
     """
@@ -2741,68 +2838,124 @@ class ApprovedCustomersView(APIView):
     """
     Approved Customers View
     ----------------------
-    Provides list of customers who have approved the manufacturer's requests.
+    Provides list of customers who have approved the manufacturer's requests
+    OR customers whose businesses the manufacturer has joined.
     Used for creating new chat rooms.
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get customers who have approved the manufacturer's requests"""
+        """Get customers who have approved the manufacturer's requests OR whose businesses the manufacturer has joined"""
         user = request.user
         
         if user.role != 'manufacturer':
             return Response({'error': 'Access denied. Only manufacturers can view approved customers.'}, status=403)
         
         try:
-            # Get all approved requests for this manufacturer
-            approved_requests = ManufacturerRequest.objects.filter(
-                manufacturer=user,
-                status='approved'
-            ).select_related('customer', 'business').order_by('-created_at')
-            
-            # Group by customer
             customers_data = {}
             
-            for request in approved_requests:
-                customer_id = request.customer.id
-                
-                if customer_id not in customers_data:
-                    customers_data[customer_id] = {
-                        'id': request.customer.id,
-                        'name': request.customer.get_full_name() or request.customer.username,
-                        'business_name': request.business.name if request.business else 'No Business',
-                        'approved_requests': [],
-                        'total_requests': 0
-                    }
-                
-                # Check if chat room already exists for this request
-                chat_exists = ChatRoom.objects.filter(
-                    customer=request.customer,
+            # 1. Get customers from approved contact requests
+            try:
+                approved_requests = ManufacturerRequest.objects.filter(
                     manufacturer=user,
-                    request=request
-                ).exists()
+                    status='approved'
+                ).select_related('customer', 'business').order_by('-created_at')
                 
-                customers_data[customer_id]['approved_requests'].append({
-                    'id': request.id,
-                    'title': request.message[:50] + '...' if len(request.message) > 50 else request.message,
-                    'created_at': request.created_at.isoformat(),
-                    'chat_exists': chat_exists
-                })
-                customers_data[customer_id]['total_requests'] += 1
+                for request in approved_requests:
+                    customer_id = request.customer.id
+                    
+                    if customer_id not in customers_data:
+                        customers_data[customer_id] = {
+                            'id': request.customer.id,
+                            'name': request.customer.get_full_name() or request.customer.username,
+                            'business_name': request.business.name if request.business else 'No Business',
+                            'business_id': request.business.id if request.business else None,
+                            'approved_requests': [],
+                            'business_relationships': [],
+                            'total_requests': 0,
+                            'has_business_relationship': False
+                        }
+                    
+                    # Check if chat room already exists for this request
+                    chat_exists = ChatRoom.objects.filter(
+                        customer=request.customer,
+                        manufacturer=user,
+                        request=request
+                    ).exists()
+                    
+                    customers_data[customer_id]['approved_requests'].append({
+                        'id': request.id,
+                        'title': request.message[:50] + '...' if len(request.message) > 50 else request.message,
+                        'created_at': request.created_at.isoformat(),
+                        'chat_exists': chat_exists,
+                        'type': 'contact_request'
+                    })
+                    customers_data[customer_id]['total_requests'] += 1
+            except Exception as e:
+                print(f"Error processing approved requests: {e}")
+                return Response({'error': f'Error processing approved requests: {str(e)}'}, status=400)
+            
+            # 2. Get customers from business relationships (manufacturer has joined their businesses)
+            try:
+                joined_businesses = Business.objects.filter(manufacturer=user).select_related('owner')
+                
+                for business in joined_businesses:
+                    if business.owner:
+                        customer_id = business.owner.id
+                        
+                        if customer_id not in customers_data:
+                            customers_data[customer_id] = {
+                                'id': business.owner.id,
+                                'name': business.owner.get_full_name() or business.owner.username,
+                                'business_name': business.name,
+                                'business_id': business.id,
+                                'approved_requests': [],
+                                'business_relationships': [],
+                                'total_requests': 0,
+                                'has_business_relationship': True
+                            }
+                        else:
+                            # Update existing customer data
+                            customers_data[customer_id]['business_name'] = business.name
+                            customers_data[customer_id]['business_id'] = business.id
+                            customers_data[customer_id]['has_business_relationship'] = True
+                        
+                        # Check if chat room already exists for this business relationship
+                        chat_exists = ChatRoom.objects.filter(
+                            customer=business.owner,
+                            manufacturer=user,
+                            business=business
+                        ).exists()
+                        
+                        customers_data[customer_id]['business_relationships'].append({
+                            'id': business.id,
+                            'title': f"Business: {business.name}",
+                            'created_at': timezone.now().isoformat(),
+                            'chat_exists': chat_exists,
+                            'type': 'business_relationship'
+                        })
+                        customers_data[customer_id]['total_requests'] += 1
+            except Exception as e:
+                print(f"Error processing business relationships: {e}")
+                return Response({'error': f'Error processing business relationships: {str(e)}'}, status=400)
             
             # Convert to list and limit requests to 3 per customer
             customers_list = []
             for customer_data in customers_data.values():
-                # Sort requests by date (newest first) and limit to 3
-                sorted_requests = sorted(
-                    customer_data['approved_requests'], 
+                # Combine and sort all relationships by date (newest first) and limit to 3
+                all_relationships = (
+                    customer_data['approved_requests'] + 
+                    customer_data['business_relationships']
+                )
+                sorted_relationships = sorted(
+                    all_relationships, 
                     key=lambda x: x['created_at'], 
                     reverse=True
                 )[:3]
                 
                 customers_list.append({
                     **customer_data,
-                    'approved_requests': sorted_requests
+                    'approved_requests': sorted_relationships
                 })
             
             return Response({
@@ -2810,6 +2963,7 @@ class ApprovedCustomersView(APIView):
             })
             
         except Exception as e:
+            print(f"General error in ApprovedCustomersView: {e}")
             return Response({'error': str(e)}, status=400)
 
 
@@ -2817,27 +2971,27 @@ class ApprovedManufacturersView(APIView):
     """
     Approved Manufacturers View
     --------------------------
-    Provides list of manufacturers who have approved the customer's requests.
+    Provides list of manufacturers who have approved the customer's requests
+    OR manufacturers who have joined the customer's businesses.
     Used for creating new chat rooms.
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get manufacturers who have approved the customer's requests"""
+        """Get manufacturers who have approved the customer's requests OR have joined the customer's businesses"""
         user = request.user
         
         if user.role != 'customer':
             return Response({'error': 'Access denied. Only customers can view approved manufacturers.'}, status=403)
         
         try:
-            # Get all approved requests for this customer
+            manufacturers_data = {}
+            
+            # 1. Get manufacturers from approved contact requests
             approved_requests = ManufacturerRequest.objects.filter(
                 customer=user,
                 status='approved'
             ).select_related('manufacturer', 'business').order_by('-created_at')
-            
-            # Group by manufacturer
-            manufacturers_data = {}
             
             for request in approved_requests:
                 manufacturer_id = request.manufacturer.id
@@ -2849,7 +3003,9 @@ class ApprovedManufacturersView(APIView):
                         'company_name': request.manufacturer.company_name or 'No Company',
                         'location': request.manufacturer.location or 'Location not set',
                         'approved_requests': [],
-                        'total_requests': 0
+                        'business_relationships': [],
+                        'total_requests': 0,
+                        'has_business_relationship': False
                     }
                 
                 # Check if chat room already exists for this request
@@ -2863,23 +3019,66 @@ class ApprovedManufacturersView(APIView):
                     'id': request.id,
                     'title': request.message[:50] + '...' if len(request.message) > 50 else request.message,
                     'created_at': request.created_at.isoformat(),
-                    'chat_exists': chat_exists
+                    'chat_exists': chat_exists,
+                    'type': 'contact_request'
                 })
                 manufacturers_data[manufacturer_id]['total_requests'] += 1
+            
+            # 2. Get manufacturers from business relationships (manufacturers who have joined the customer's businesses)
+            owned_businesses = Business.objects.filter(owner=user).select_related('manufacturer')
+            
+            for business in owned_businesses:
+                if business.manufacturer:
+                    manufacturer_id = business.manufacturer.id
+                    
+                    if manufacturer_id not in manufacturers_data:
+                        manufacturers_data[manufacturer_id] = {
+                            'id': business.manufacturer.id,
+                            'name': business.manufacturer.get_full_name() or business.manufacturer.username,
+                            'company_name': business.manufacturer.company_name or 'No Company',
+                            'location': business.manufacturer.location or 'Location not set',
+                            'approved_requests': [],
+                            'business_relationships': [],
+                            'total_requests': 0,
+                            'has_business_relationship': True
+                        }
+                    else:
+                        # Update existing manufacturer data
+                        manufacturers_data[manufacturer_id]['has_business_relationship'] = True
+                    
+                    # Check if chat room already exists for this business relationship
+                    chat_exists = ChatRoom.objects.filter(
+                        customer=user,
+                        manufacturer=business.manufacturer,
+                        business=business
+                    ).exists()
+                    
+                    manufacturers_data[manufacturer_id]['business_relationships'].append({
+                        'id': business.id,
+                        'title': f"Business: {business.name}",
+                        'created_at': timezone.now().isoformat(),
+                        'chat_exists': chat_exists,
+                        'type': 'business_relationship'
+                    })
+                    manufacturers_data[manufacturer_id]['total_requests'] += 1
             
             # Convert to list and limit requests to 3 per manufacturer
             manufacturers_list = []
             for manufacturer_data in manufacturers_data.values():
-                # Sort requests by date (newest first) and limit to 3
-                sorted_requests = sorted(
-                    manufacturer_data['approved_requests'], 
+                # Combine and sort all relationships by date (newest first) and limit to 3
+                all_relationships = (
+                    manufacturer_data['approved_requests'] + 
+                    manufacturer_data['business_relationships']
+                )
+                sorted_relationships = sorted(
+                    all_relationships, 
                     key=lambda x: x['created_at'], 
                     reverse=True
                 )[:3]
                 
                 manufacturers_list.append({
                     **manufacturer_data,
-                    'approved_requests': sorted_requests
+                    'approved_requests': sorted_relationships
                 })
             
             return Response({

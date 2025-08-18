@@ -687,6 +687,7 @@ class ChatRoom(models.Model):
     manufacturer = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='manufacturer_chats')
     request = models.ForeignKey(ManufacturerRequest, on_delete=models.CASCADE, related_name='chat_room', null=True, blank=True)
     proposal_response = models.ForeignKey(ProposalResponse, on_delete=models.CASCADE, related_name='chat_room', null=True, blank=True)
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='chat_rooms', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
 
@@ -694,7 +695,8 @@ class ChatRoom(models.Model):
     class Meta:
         unique_together = [
             ['customer', 'manufacturer', 'request'],
-            ['customer', 'manufacturer', 'proposal_response']
+            ['customer', 'manufacturer', 'proposal_response'],
+            ['customer', 'manufacturer', 'business']
         ]
         ordering = ['-created_at']
     
@@ -702,12 +704,13 @@ class ChatRoom(models.Model):
         return f"Chat: {self.customer.get_full_name()} & {self.manufacturer.get_full_name()}"
     
     def clean(self):
-        """Ensure either request or proposal_response is set, but not both"""
+        """Ensure either request, proposal_response, or business is set, but not multiple"""
         from django.core.exceptions import ValidationError
-        if not self.request and not self.proposal_response:
-            raise ValidationError("Either request or proposal_response must be set")
-        if self.request and self.proposal_response:
-            raise ValidationError("Cannot have both request and proposal_response")
+        fields_set = sum([bool(self.request), bool(self.proposal_response), bool(self.business)])
+        if fields_set == 0:
+            raise ValidationError("Either request, proposal_response, or business must be set")
+        if fields_set > 1:
+            raise ValidationError("Cannot have multiple of request, proposal_response, or business")
     
     @property
     def unread_count_customer(self):

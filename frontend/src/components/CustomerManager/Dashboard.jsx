@@ -3,6 +3,7 @@ import { ShoppingBag, Package, DollarSign, Users, Calendar, Activity, Building, 
 import { useAuth } from '../../context/AuthContext';
 import CustomerPerformanceOverview from './CustomerPerformanceOverview';
 import LoadingSpinner from '../shared/LoadingSpinner';
+import { colors } from '../../constants/theme';
 
 const Dashboard = ({ businessId = null }) => {
   const { currentUser, isAuthenticated } = useAuth();
@@ -25,28 +26,6 @@ const Dashboard = ({ businessId = null }) => {
       setLoading(false);
     }
   }, [businessId, isAuthenticated]);
-
-  // Color scheme constants
-  const colors = {
-    midnightBlue: '#1C2E4A',
-    dustyBlue: '#52677D',
-    ivory: '#BDC4D4',
-    deepNavy: '#0F1A2B',
-    buttercream: '#D1CFC9',
-    primary: '#1C2E4A',
-    secondary: '#52677D',
-    background: '#F8FAFC',
-    cardBg: '#FFFFFF',
-    textPrimary: '#1C2E4A',
-    textSecondary: '#52677D',
-    textMuted: '#94A3B8',
-    border: '#E2E8F0',
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444'
-  };
-
-
 
   // Manual data fetching functions - only called when user clicks
   const fetchDashboardData = async () => {
@@ -206,15 +185,16 @@ const Dashboard = ({ businessId = null }) => {
   // Ensure products is always an array
   const productsArray = Array.isArray(products) ? products : [];
 
-
-
   // No business ID provided
   if (!businessId) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: colors.background }}>
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
-            <p className="text-lg font-medium" style={{ color: colors.textPrimary }}>No business selected</p>
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.secondary }}>
+              <Building className="w-10 h-10 text-white" />
+            </div>
+            <p className="text-xl font-semibold mb-2" style={{ color: colors.textPrimary }}>No business selected</p>
             <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>Please select a business to view dashboard</p>
           </div>
         </div>
@@ -229,8 +209,8 @@ const Dashboard = ({ businessId = null }) => {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center max-w-md mx-auto px-6">
             <div className="bg-white rounded-2xl shadow-lg p-8 border" style={{ borderColor: colors.border }}>
-              <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.ivory }}>
-                <Users size={32} style={{ color: colors.primary }} />
+              <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary }}>
+                <Users className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-xl font-semibold mb-2" style={{ color: colors.textPrimary }}>Welcome Back</h2>
               <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>Please log in to view your personalized dashboard</p>
@@ -258,8 +238,8 @@ const Dashboard = ({ businessId = null }) => {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center max-w-md mx-auto px-6">
             <div className="bg-white rounded-2xl shadow-lg p-8 border" style={{ borderColor: colors.border }}>
-              <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FEF2F2' }}>
-                <svg className="w-8 h-8" style={{ color: colors.error }} fill="currentColor" viewBox="0 0 20 20">
+              <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-red-100">
+                <svg className="w-8 h-8 text-red-600" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               </div>
@@ -312,86 +292,86 @@ const Dashboard = ({ businessId = null }) => {
         </div>
       )}
       
-      {/* Main Stats Row - More Compact */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border" style={{ borderColor: colors.border }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: colors.ivory }}>
-              <Package size={20} style={{ color: colors.primary }} />
+      {/* Main Stats Row - Enhanced Design */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border" style={{ borderColor: colors.border }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: colors.secondary }}>
+              <Package className="w-6 h-6 text-white" />
             </div>
-            <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: colors.ivory, color: colors.primary }}>
+            <span className="px-3 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: colors.secondary, color: 'white' }}>
               Products
             </span>
           </div>
-          <h2 className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Products</h2>
+          <h2 className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Total Products</h2>
           <div className="flex items-baseline">
-            <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>{productsArray.length}</p>
-            <span className="ml-1 text-xs" style={{ color: colors.textMuted }}>items</span>
+            <p className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{productsArray.length}</p>
+            <span className="ml-2 text-sm" style={{ color: colors.textSecondary }}>items</span>
           </div>
         </div>
         
-        <div className="bg-white rounded-xl shadow-sm p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border" style={{ borderColor: colors.border }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#ECFDF5' }}>
-              <ShoppingBag size={20} style={{ color: colors.success }} />
+        <div className="bg-white rounded-2xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border" style={{ borderColor: colors.border }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: colors.success }}>
+              <ShoppingBag className="w-6 h-6 text-white" />
             </div>
-            <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: '#ECFDF5', color: colors.success }}>
+            <span className="px-3 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: colors.success, color: 'white' }}>
               Orders
             </span>
           </div>
-          <h2 className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Orders</h2>
+          <h2 className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Total Orders</h2>
           <div className="flex items-baseline">
-            <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>{orders.length}</p>
+            <p className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{orders.length}</p>
           </div>
         </div>
         
-        <div className="bg-white rounded-xl shadow-sm p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border" style={{ borderColor: colors.border }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
-              <DollarSign size={20} style={{ color: colors.warning }} />
+        <div className="bg-white rounded-2xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border" style={{ borderColor: colors.border }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: colors.warning }}>
+              <DollarSign className="w-6 h-6 text-white" />
             </div>
-            <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: '#FEF3C7', color: colors.warning }}>
+            <span className="px-3 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: colors.warning, color: 'white' }}>
               Revenue
             </span>
           </div>
-          <h2 className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Revenue</h2>
+          <h2 className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>Total Revenue</h2>
           <div className="flex items-baseline">
-            <p className="text-2xl font-bold" style={{ color: colors.textPrimary }}>${finalRevenue.toFixed(2)}</p>
+            <p className="text-3xl font-bold" style={{ color: colors.textPrimary }}>${finalRevenue.toFixed(2)}</p>
           </div>
-          <div className="flex items-center mt-2">
+          <div className="flex items-center mt-3">
             {revenueGrowth > 0 ? (
-              <TrendingUp size={14} style={{ color: colors.success }} />
+              <TrendingUp className="w-4 h-4 text-green-600" />
             ) : revenueGrowth < 0 ? (
-              <TrendingDown size={14} style={{ color: colors.error }} />
+              <TrendingDown className="w-4 h-4 text-red-600" />
             ) : (
-              <Target size={14} style={{ color: colors.warning }} />
+              <Target className="w-4 h-4 text-yellow-600" />
             )}
-            <span className={`ml-1 text-xs font-medium ${
+            <span className={`ml-2 text-sm font-medium ${
               revenueGrowth > 0 ? 'text-green-600' : 
               revenueGrowth < 0 ? 'text-red-600' : 'text-yellow-600'
             }`}>
-              {revenueGrowth > 0 ? '+' : ''}{revenueGrowth}%
+              {revenueGrowth > 0 ? '+' : ''}{revenueGrowth.toFixed(1)}%
             </span>
-            <span className="ml-1 text-xs" style={{ color: colors.textMuted }}>vs last month</span>
+            <span className="ml-2 text-xs" style={{ color: colors.textSecondary }}>vs last month</span>
           </div>
         </div>
       </div>
 
-      {/* Performance Overview Section - Much Smaller Height */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Main Performance Chart - Smaller Height */}
-        <div className="bg-white rounded-xl shadow-sm p-4 xl:col-span-2 transition-all duration-300 hover:shadow-lg border" style={{ borderColor: colors.border }}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+      {/* Performance Overview Section - Enhanced Design */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Main Performance Chart - Enhanced */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 xl:col-span-2 transition-all duration-300 hover:shadow-xl border" style={{ borderColor: colors.border }}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
-              <h2 className="text-lg font-semibold mb-1" style={{ color: colors.textPrimary }}>Performance Overview</h2>
-              <p className="text-xs" style={{ color: colors.textSecondary }}>Monthly metrics visualization</p>
+              <h2 className="text-xl font-bold mb-2" style={{ color: colors.textPrimary }}>Performance Overview</h2>
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Monthly metrics visualization</p>
             </div>
-            <div className="flex space-x-1 mt-3 sm:mt-0">
+            <div className="flex space-x-2 mt-4 sm:mt-0">
               <button 
                 onClick={() => setSelectedTimePeriod('weekly')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   selectedTimePeriod === 'weekly' 
-                    ? 'text-white' 
+                    ? 'text-white shadow-lg' 
                     : 'hover:bg-gray-100'
                 }`}
                 style={{ 
@@ -403,9 +383,9 @@ const Dashboard = ({ businessId = null }) => {
               </button>
               <button 
                 onClick={() => setSelectedTimePeriod('monthly')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   selectedTimePeriod === 'monthly' 
-                    ? 'text-white' 
+                    ? 'text-white shadow-lg' 
                     : 'hover:bg-gray-100'
                 }`}
                 style={{ 
@@ -417,9 +397,9 @@ const Dashboard = ({ businessId = null }) => {
               </button>
               <button 
                 onClick={() => setSelectedTimePeriod('yearly')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   selectedTimePeriod === 'yearly' 
-                    ? 'text-white' 
+                    ? 'text-white shadow-lg' 
                     : 'hover:bg-gray-100'
                 }`}
                 style={{ 
@@ -431,35 +411,35 @@ const Dashboard = ({ businessId = null }) => {
               </button>
             </div>
           </div>
-          <div className="h-40">
+          <div className="h-48">
             <CustomerPerformanceOverview 
-          businessId={businessId} 
-          selectedTimePeriod={selectedTimePeriod}
-          orders={orders}
-          invoices={invoices}
-          products={products}
-        />
+              businessId={businessId} 
+              selectedTimePeriod={selectedTimePeriod}
+              orders={orders}
+              invoices={invoices}
+              products={products}
+            />
           </div>
         </div>
         
-        {/* Recent Orders - Smaller Height */}
-        <div className="bg-white rounded-xl shadow-sm p-4 transition-all duration-300 hover:shadow-lg border" style={{ borderColor: colors.border }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>Recent Orders</h2>
-            <button className="text-xs font-medium transition-colors hover:underline" style={{ color: colors.primary }}>
+        {/* Recent Orders - Enhanced */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl border" style={{ borderColor: colors.border }}>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold" style={{ color: colors.textPrimary }}>Recent Orders</h2>
+            <button className="text-sm font-medium transition-colors hover:underline" style={{ color: colors.primary }}>
               View All
             </button>
           </div>
           
-          <div className="space-y-2 h-40 overflow-y-auto">
+          <div className="space-y-3 h-48 overflow-y-auto">
             {orders.length > 0 ? (
-              orders.slice(0, 3).map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-3 rounded-lg transition-all duration-200 hover:shadow-sm" style={{ backgroundColor: colors.background }}>
+              orders.slice(0, 4).map((order) => (
+                <div key={order.id} className="flex items-center justify-between p-4 rounded-xl transition-all duration-200 hover:shadow-md" style={{ backgroundColor: colors.background }}>
                   <div>
-                    <p className="text-xs font-medium" style={{ color: colors.textPrimary }}>{order.order_number || `Order #${order.id}`}</p>
+                    <p className="text-sm font-semibold" style={{ color: colors.textPrimary }}>{order.order_number || `Order #${order.id}`}</p>
                     <p className="text-xs" style={{ color: colors.textSecondary }}>{new Date(order.created_at).toLocaleDateString()}</p>
                   </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                     order.status === 'completed' ? 'bg-green-100 text-green-600' :
                     order.status === 'pending' ? 'bg-yellow-100 text-yellow-600' :
                     'bg-gray-100 text-gray-600'
@@ -469,28 +449,28 @@ const Dashboard = ({ businessId = null }) => {
                 </div>
               ))
             ) : (
-              <div className="text-center py-6">
-                <div className="w-10 h-10 mx-auto mb-3 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.ivory }}>
-                  <ShoppingBag size={16} style={{ color: colors.textMuted }} />
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.secondary }}>
+                  <ShoppingBag className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xs font-medium mb-1" style={{ color: colors.textPrimary }}>No orders yet</h3>
+                <h3 className="text-sm font-semibold mb-2" style={{ color: colors.textPrimary }}>No orders yet</h3>
                 <p className="text-xs" style={{ color: colors.textSecondary }}>Your orders will appear here</p>
               </div>
             )}
           </div>
           
-          <div className="mt-4 pt-3 border-t" style={{ borderColor: colors.border }}>
+          <div className="mt-6 pt-4 border-t" style={{ borderColor: colors.border }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Next delivery</p>
+                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>Next delivery</p>
                 <div className="flex items-center mt-1">
-                  <Calendar size={12} className="mr-1" style={{ color: colors.textSecondary }} />
-                  <p className="text-xs font-medium" style={{ color: colors.textPrimary }}>
+                  <Calendar className="w-4 h-4 mr-2" style={{ color: colors.textSecondary }} />
+                  <p className="text-sm font-medium" style={{ color: colors.textPrimary }}>
                     {orders.length > 0 ? 'Check orders for details' : 'No upcoming deliveries'}
                   </p>
                 </div>
               </div>
-              <button className="px-3 py-1 text-xs font-medium rounded-lg transition-colors hover:bg-gray-50 border" style={{ color: colors.textSecondary, borderColor: colors.border }}>
+              <button className="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-gray-50 border" style={{ color: colors.textSecondary, borderColor: colors.border }}>
                 Details
               </button>
             </div>

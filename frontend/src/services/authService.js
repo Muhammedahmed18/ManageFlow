@@ -42,7 +42,6 @@ api.interceptors.response.use(
       const refreshToken = sessionStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        console.warn('No refresh token available, redirecting to login');
         sessionStorage.clear();
         localStorage.setItem("loginRedirectMessage", "Your session has expired. Please log in again.");
         window.location.href = "/login";
@@ -50,7 +49,6 @@ api.interceptors.response.use(
       }
 
       try {
-        console.log('Attempting to refresh token...');
         const res = await api.post("/auth/refresh/", { refresh: refreshToken });
         const { access, refresh } = res.data;
 
@@ -67,7 +65,6 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
         sessionStorage.clear();
         localStorage.setItem("loginRedirectMessage", "Your session has expired. Please log in again.");
         window.location.href = "/login";
@@ -97,13 +94,9 @@ export const loginUser = async (username, password, business_id, role) => {
       requestData.business_id = business_id;
     }
     
-    console.log('Login request data:', requestData);
-    
     const response = await api.post('/auth/login/', requestData);
-    console.log('Login response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Login error details:', error.response?.data);
     throw error;
   }
 };
@@ -194,7 +187,7 @@ export const logoutUser = async (skipApiCall = false) => {
       }
     }
   } catch (error) {
-    console.warn('Logout API call failed:', error);
+    // Logout API call failed, but we still clear session
   } finally {
     sessionStorage.clear();
   }
@@ -202,14 +195,3 @@ export const logoutUser = async (skipApiCall = false) => {
 
 export { api };
 export default api;
-
-
-// ==================== Product Management ====================
-
-export const createProduct = async (formData) => {
-  return await api.post('/products/', formData);
-};
-
-export const updateProduct = async (formData, productId) => {
-  return await api.put(`/products/${productId}/`, formData);
-};

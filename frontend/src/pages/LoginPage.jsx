@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
-import { Lock, User, Factory, Users, ArrowRight, Key, UserPlus, Home, Loader2 } from "lucide-react";
+import { Lock, User, Factory, Users, ArrowRight, Key, UserPlus, Home, Loader2, Eye, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
 import colors from '../assets/colors';
 
@@ -20,6 +20,7 @@ const LoginPage = () => {
     type: "" // can be 'username', 'password', 'account', 'network', or 'general'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -128,6 +129,17 @@ const LoginPage = () => {
       );
 
       const { access, refresh, role: userRole } = response;
+      
+      // Frontend double-check: compare selected role with userRole returned from backend
+      if (userRole !== role) {
+        setError({
+          message: `You selected the wrong account type. Please switch to ${userRole} tab.`,
+          type: "account"
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
       await updateCurrentUser({ token: access, role: userRole });
       sessionStorage.setItem("role", userRole);
       sessionStorage.setItem("accessToken", access);
@@ -150,7 +162,11 @@ const LoginPage = () => {
           if (data.detail) {
             const detail = data.detail.toLowerCase();
             
-            if (detail.includes("password") && detail.includes("incorrect")) {
+            // Check for role mismatch errors first
+            if (detail.includes("this account is a") && detail.includes("not a")) {
+              errorMessage = "You selected the wrong account type. Please switch to the correct tab and try again.";
+              errorType = "account";
+            } else if (detail.includes("password") && detail.includes("incorrect")) {
               errorMessage = "Password is incorrect. Please try again";
               errorType = "password";
             } else if (detail.includes("username") && detail.includes("incorrect")) {
@@ -402,12 +418,12 @@ const LoginPage = () => {
                   color: error.type === 'password' ? '#ef4444' : colors.textSecondary 
                 }} />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Enter your password"
-                  className={`w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 outline-none transition ${
+                  className={`w-full pl-10 pr-12 py-3 rounded-lg border focus:ring-2 outline-none transition ${
                     error.type === 'password' 
                       ? 'border-red-300 focus:ring-red-200 focus:border-red-400' 
                       : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
@@ -417,6 +433,24 @@ const LoginPage = () => {
                     color: colors.textPrimary
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors z-10"
+                  style={{ 
+                    color: colors.textSecondary,
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '32px',
+                    minHeight: '32px'
+                  }}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 

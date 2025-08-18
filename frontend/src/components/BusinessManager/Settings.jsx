@@ -269,71 +269,9 @@ const Settings = ({ businessId }) => {
             </div>
           )}
 
-          {/* Account Management */}
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-full bg-red-50 text-red-600">
-                <FiUser className="w-4 h-4" />
-              </div>
-              <h2 className="font-medium">Account Management</h2>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium mb-2">Account Security</h3>
-                <p className="text-xs text-gray-600 mb-3">
-                  Manage your account settings and security preferences
-                </p>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <FiShield className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm text-gray-700">Account Status</span>
-                    </div>
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                      Active
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <FiUser className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm text-gray-700">User Type</span>
-                    </div>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full capitalize">
-                      {role}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-medium mb-2 text-red-700">Danger Zone</h3>
-                <p className="text-xs text-gray-600 mb-3">
-                  Irreversible and destructive actions
-                </p>
-                
-                <button
-                  onClick={() => setShowDeleteAccountModal(true)}
-                  className="w-full px-4 py-3 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors flex items-center justify-center gap-2"
-                >
-                  <FiAlertTriangle className="w-4 h-4" />
-                  Delete Account
-                </button>
-              </div>
-            </div>
-          </div>
+          
         </div>
       </div>
-
-      {/* Account Deletion Modal */}
-      <AccountDeletionModal
-        isOpen={showDeleteAccountModal}
-        onClose={() => setShowDeleteAccountModal(false)}
-        onSuccess={handleAccountDeletionSuccess}
-        userType={role}
-      />
     </div>
   );
 };

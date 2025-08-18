@@ -270,62 +270,76 @@ const DiscoverCustomers = ({ currentUser }) => {
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Header */}
+      <div className="mb-6">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: colors.textPrimary }}>
+            Discover Customers
+          </h1>
+          <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+            Find and connect with potential customers for your manufacturing services
+          </p>
+        </div>
+      </div>
+
       {/* Search and Filters */}
       <div className="mb-6">
-        <div className="relative mb-4">
-          <Search 
-            className="absolute left-4 top-1/2 transform -translate-y-1/2" 
-            size={20} 
-            style={{ color: colors.textSecondary }}
-          />
-          <input
-            type="text"
-            placeholder="Search customers or businesses..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent"
-            style={{ 
-              borderColor: colors.border,
-              backgroundColor: colors.background,
-              color: colors.textPrimary
-            }}
-          />
-        </div>
-        
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={industryFilter}
-            onChange={(e) => setIndustryFilter(e.target.value)}
-            className="px-4 py-2 border rounded-lg text-sm"
-            style={{ 
-              borderColor: colors.border,
-              backgroundColor: colors.cardBg,
-              color: colors.textPrimary
-            }}
-          >
-            <option value="all">All Industries</option>
-            <option value="Textiles">Textiles</option>
-            <option value="Electronics">Electronics</option>
-            <option value="Food">Food</option>
-            <option value="Automotive">Automotive</option>
-          </select>
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <div className="flex-1 relative">
+            <Search 
+              className="absolute left-3 top-1/2 transform -translate-y-1/2" 
+              size={20} 
+              style={{ color: colors.textSecondary }}
+            />
+            <input
+              type="text"
+              placeholder="Search customers or businesses..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.cardBg,
+                color: colors.textPrimary
+              }}
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <FilterIcon className="w-4 h-4" style={{ color: colors.textSecondary }} />
+            <select
+              value={industryFilter}
+              onChange={(e) => setIndustryFilter(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.cardBg,
+                color: colors.textPrimary
+              }}
+            >
+              <option value="all">All Industries</option>
+              <option value="Textiles">Textiles</option>
+              <option value="Electronics">Electronics</option>
+              <option value="Food">Food</option>
+              <option value="Automotive">Automotive</option>
+            </select>
 
-          <select
-            value={countryFilter}
-            onChange={(e) => setCountryFilter(e.target.value)}
-            className="px-4 py-2 border rounded-lg text-sm"
-            style={{ 
-              borderColor: colors.border,
-              backgroundColor: colors.cardBg,
-              color: colors.textPrimary
-            }}
-          >
-            <option value="all">All Countries</option>
-            <option value="Pakistan">Pakistan</option>
-            <option value="USA">USA</option>
-            <option value="UK">UK</option>
-            <option value="China">China</option>
-          </select>
+            <select
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.cardBg,
+                color: colors.textPrimary
+              }}
+            >
+              <option value="all">All Countries</option>
+              <option value="Pakistan">Pakistan</option>
+              <option value="USA">USA</option>
+              <option value="UK">UK</option>
+              <option value="China">China</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -349,20 +363,25 @@ const DiscoverCustomers = ({ currentUser }) => {
                   <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
                     <Users size={24} style={{ color: colors.primary }} />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-lg" style={{ color: colors.textPrimary }}>
-                      {customer.customer_name}
-                    </h3>
-                    <p style={{ color: colors.textSecondary }}>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <h3 className="font-semibold text-lg" style={{ color: colors.textPrimary }}>
+                        {customer.customer_name}
+                      </h3>
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Customer
+                      </span>
+                    </div>
+                    <p className="text-sm mb-3" style={{ color: colors.textSecondary }}>
                       {customer.customer_email}
                     </p>
-                    <div className="flex items-center space-x-4 mt-2 text-sm" style={{ color: colors.textSecondary }}>
+                    <div className="flex items-center space-x-6 text-sm" style={{ color: colors.textSecondary }}>
                       <span className="flex items-center">
-                        <Building size={16} className="mr-1" />
+                        <Building size={16} className="mr-2" />
                         {customer.total_businesses} businesses
                       </span>
                       <span className="flex items-center">
-                        <MapPin size={16} className="mr-1" />
+                        <MapPin size={16} className="mr-2" />
                         <span style={{ color: customer.location ? colors.textSecondary : '#f59e0b' }}>
                           {customer.location || 'Location not set'}
                         </span>
@@ -372,7 +391,7 @@ const DiscoverCustomers = ({ currentUser }) => {
                 </div>
                 <button
                   onClick={() => toggleCustomerExpansion(customer.customer_id)}
-                  className="p-2 rounded-lg transition-colors"
+                  className="p-2 rounded-lg transition-colors hover:bg-gray-100"
                   style={{ 
                     backgroundColor: 'transparent',
                     color: colors.textSecondary
@@ -417,18 +436,21 @@ const DiscoverCustomers = ({ currentUser }) => {
                             >
                               {business.business_name}
                             </h4>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Business
+                            </span>
                           </div>
 
-                          <div className="space-y-2 mb-3">
+                          <div className="space-y-3 mb-4">
                             {business.industry && (
                               <div className="flex items-center text-sm" style={{ color: colors.textSecondary }}>
-                                <Building size={14} className="mr-2 flex-shrink-0" />
+                                <Building size={16} className="mr-2 flex-shrink-0" />
                                 <span className="line-clamp-1">{business.industry}</span>
                               </div>
                             )}
                             {business.location && (
                               <div className="flex items-center text-sm" style={{ color: colors.textSecondary }}>
-                                <MapPin size={14} className="mr-2 flex-shrink-0" />
+                                <MapPin size={16} className="mr-2 flex-shrink-0" />
                                 <span className="line-clamp-1">{business.location}</span>
                               </div>
                             )}
@@ -437,7 +459,7 @@ const DiscoverCustomers = ({ currentUser }) => {
                               style={{ color: colors.textSecondary }}
                               onClick={() => openProductModal(business)}
                             >
-                              <Package size={14} className="mr-2 flex-shrink-0" />
+                              <Package size={16} className="mr-2 flex-shrink-0" />
                               <span>{business.total_products} products</span>
                             </div>
                           </div>
@@ -492,25 +514,38 @@ const DiscoverCustomers = ({ currentUser }) => {
 
       {/* Request Modal */}
       {showRequestModal && selectedBusiness && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-lg max-w-lg w-full"
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden"
           >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold" style={{ color: colors.textPrimary }}>
-                  Contact {selectedBusiness.business_name}
-                </h3>
-                <button
-                  onClick={() => setShowRequestModal(false)}
-                  className="p-2 rounded-lg hover:bg-gray-100"
-                >
-                  <X size={20} />
-                </button>
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.primary + '20' }}>
+                  <MessageCircle size={20} style={{ color: colors.primary }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>
+                    Contact {selectedBusiness.business_name}
+                  </h2>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    Send a contact request to this business
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={() => setShowRequestModal(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} style={{ color: colors.textSecondary }} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
 
               <div className="space-y-4">
                 <div>
@@ -521,8 +556,9 @@ const DiscoverCustomers = ({ currentUser }) => {
                     type="text"
                     value={requestForm.manufacturer_name}
                     onChange={(e) => setRequestForm({...requestForm, manufacturer_name: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     style={{ borderColor: colors.border }}
+                    placeholder="Enter your full name"
                   />
                 </div>
 
@@ -534,8 +570,9 @@ const DiscoverCustomers = ({ currentUser }) => {
                     type="email"
                     value={requestForm.manufacturer_email}
                     onChange={(e) => setRequestForm({...requestForm, manufacturer_email: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     style={{ borderColor: colors.border }}
+                    placeholder="Enter your email address"
                   />
                 </div>
 
@@ -547,36 +584,37 @@ const DiscoverCustomers = ({ currentUser }) => {
                     value={requestForm.message}
                     onChange={(e) => setRequestForm({...requestForm, message: e.target.value})}
                     rows={6}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                     style={{ borderColor: colors.border }}
                     placeholder="Tell them about your manufacturing capabilities, what you manufacture, your experience, and any additional message..."
                   />
                 </div>
 
                 {requestError && (
-                  <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: colors.error + '10', color: colors.error }}>
+                  <div className="p-3 rounded-lg text-sm border" style={{ backgroundColor: colors.error + '10', color: colors.error, borderColor: colors.error + '30' }}>
                     {requestError}
                   </div>
                 )}
-
-                <div className="flex space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowRequestModal(false)}
-                    className="flex-1 py-2 px-4 rounded-lg border transition-colors"
-                    style={{ borderColor: colors.border, color: colors.textSecondary }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleRequestSubmit}
-                    disabled={requestLoading}
-                    className="flex-1 py-2 px-4 rounded-lg transition-colors"
-                    style={{ backgroundColor: colors.primary, color: '#FFFFFF' }}
-                  >
-                    {requestLoading ? 'Sending...' : 'Send Request'}
-                  </button>
-                </div>
               </div>
+            </div>
+
+                        {/* Footer Actions */}
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowRequestModal(false)}
+                className="px-4 py-2 rounded-lg border font-medium transition-colors"
+                style={{ borderColor: colors.border, color: colors.textSecondary }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestSubmit}
+                disabled={requestLoading}
+                className="px-4 py-2 rounded-lg text-white font-medium transition-colors"
+                style={{ backgroundColor: colors.primary }}
+              >
+                {requestLoading ? 'Sending...' : 'Send Request'}
+              </button>
             </div>
           </motion.div>
         </div>

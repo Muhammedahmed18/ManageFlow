@@ -32,6 +32,10 @@ const ProposalManagement = ({ business, onViewResponses }) => {
     budget_range: '',
     deadline: ''
   });
+  
+  // Quantity validation state
+  const [quantityError, setQuantityError] = useState('');
+  const [quantityValid, setQuantityValid] = useState(true);
 
   const fetchProposals = async () => {
     try {
@@ -83,6 +87,98 @@ const ProposalManagement = ({ business, onViewResponses }) => {
     }
   };
 
+  // Quantity validation function
+  const validateQuantity = (value) => {
+    if (!value.trim()) {
+      setQuantityError('');
+      setQuantityValid(true);
+      return true;
+    }
+
+    // Check if it's a single number
+    if (/^\d+$/.test(value)) {
+      const num = parseInt(value);
+      if (num < 1) {
+        setQuantityError('Quantity must be at least 1');
+        setQuantityValid(false);
+        return false;
+      }
+      if (num > 5000) {
+        setQuantityError('Quantity cannot exceed 5000');
+        setQuantityValid(false);
+        return false;
+      }
+      setQuantityError('');
+      setQuantityValid(true);
+      return true;
+    }
+
+    // Check if it's a complete range (e.g., 300-500)
+    if (/^\d+-\d+$/.test(value)) {
+      const [min, max] = value.split('-').map(num => parseInt(num));
+      
+      if (min < 1) {
+        setQuantityError('Minimum quantity must be at least 1');
+        setQuantityValid(false);
+        return false;
+      }
+      
+      if (max > 5000) {
+        setQuantityError('Maximum quantity cannot exceed 5000');
+        setQuantityValid(false);
+        return false;
+      }
+      
+      if (min >= max) {
+        setQuantityError('Minimum quantity must be less than maximum quantity');
+        setQuantityValid(false);
+        return false;
+      }
+      
+      setQuantityError('');
+      setQuantityValid(true);
+      return true;
+    }
+
+    // Check if it's an incomplete range (e.g., 300-)
+    if (/^\d+-$/.test(value)) {
+      const min = parseInt(value.replace('-', ''));
+      if (min < 1) {
+        setQuantityError('Minimum quantity must be at least 1');
+        setQuantityValid(false);
+        return false;
+      }
+      if (min >= 5000) {
+        setQuantityError('Minimum quantity must be less than 5000');
+        setQuantityValid(false);
+        return false;
+      }
+      setQuantityError('Complete the range (e.g., 300-500)');
+      setQuantityValid(false);
+      return false;
+    }
+
+    // Invalid format
+    setQuantityError('Enter a number (300) or range (300-500)');
+    setQuantityValid(false);
+    return false;
+  };
+
+  // Handle quantity input with validation
+  const handleQuantityChange = (e) => {
+    const value = e.target.value;
+    
+    // Filter out invalid characters (only allow digits and hyphens)
+    const filteredValue = value.replace(/[^\d-]/g, '');
+    
+    // Prevent multiple consecutive hyphens
+    const cleanValue = filteredValue.replace(/-+/g, '-');
+    
+    // Allow typing ranges naturally - don't remove trailing hyphen
+    setProposalForm({...proposalForm, quantity_needed: cleanValue});
+    validateQuantity(cleanValue);
+  };
+
   const handleAddCustomCategory = async () => {
     if (!customCategory.trim()) {
       showToast('Please enter a category name', 'error');
@@ -111,6 +207,12 @@ const ProposalManagement = ({ business, onViewResponses }) => {
       return;
     }
 
+    // Validate quantity if provided
+    if (proposalForm.quantity_needed.trim() && !validateQuantity(proposalForm.quantity_needed)) {
+      showToast(quantityError || 'Please enter a valid quantity', 'error');
+      return;
+    }
+
     try {
       setSaving(true);
       const response = await api.post('/management/proposals/', {
@@ -132,6 +234,12 @@ const ProposalManagement = ({ business, onViewResponses }) => {
 
   const handleEditProposal = async () => {
     if (!selectedProposal) return;
+
+    // Validate quantity if provided
+    if (proposalForm.quantity_needed.trim() && !validateQuantity(proposalForm.quantity_needed)) {
+      showToast(quantityError || 'Please enter a valid quantity', 'error');
+      return;
+    }
 
     try {
       setSaving(true);
@@ -195,6 +303,9 @@ const ProposalManagement = ({ business, onViewResponses }) => {
       budget_range: '',
       deadline: ''
     });
+    // Reset validation state
+    setQuantityError('');
+    setQuantityValid(true);
   };
 
   const showToast = (message, type = 'success') => {
@@ -647,11 +758,29 @@ const ProposalManagement = ({ business, onViewResponses }) => {
                       <input
                         type="text"
                         value={proposalForm.quantity_needed}
-                        onChange={(e) => setProposalForm({...proposalForm, quantity_needed: e.target.value})}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        style={{ borderColor: colors.border }}
-                        placeholder="e.g., 100-500 units"
+                        onChange={handleQuantityChange}
+                        className={`w-full px-3 py-2 border rounded-lg transition-colors ${
+                          quantityValid ? '' : 'border-red-500 focus:border-red-500'
+                        }`}
+                        style={{ 
+                          borderColor: quantityValid ? colors.border : '#ef4444',
+                          backgroundColor: quantityValid ? 'white' : '#fef2f2'
+                        }}
+                        placeholder="300 or 300-500"
+                        maxLength="15"
                       />
+                      {quantityError && (
+                        <p className="text-xs text-red-500 mt-1 flex items-center">
+                          <AlertCircle size={12} className="mr-1" />
+                          {quantityError}
+                        </p>
+                      )}
+                      {quantityValid && proposalForm.quantity_needed && !quantityError && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center">
+                          <CheckCircle size={12} className="mr-1" />
+                          Valid quantity format
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -844,11 +973,29 @@ const ProposalManagement = ({ business, onViewResponses }) => {
                       <input
                         type="text"
                         value={proposalForm.quantity_needed}
-                        onChange={(e) => setProposalForm({...proposalForm, quantity_needed: e.target.value})}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        style={{ borderColor: colors.border }}
-                        placeholder="e.g., 100-500 units"
+                        onChange={handleQuantityChange}
+                        className={`w-full px-3 py-2 border rounded-lg transition-colors ${
+                          quantityValid ? '' : 'border-red-500 focus:border-red-500'
+                        }`}
+                        style={{ 
+                          borderColor: quantityValid ? colors.border : '#ef4444',
+                          backgroundColor: quantityValid ? 'white' : '#fef2f2'
+                        }}
+                        placeholder="300 or 300-500"
+                        maxLength="15"
                       />
+                      {quantityError && (
+                        <p className="text-xs text-red-500 mt-1 flex items-center">
+                          <AlertCircle size={12} className="mr-1" />
+                          {quantityError}
+                        </p>
+                      )}
+                      {quantityValid && proposalForm.quantity_needed && !quantityError && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center">
+                          <CheckCircle size={12} className="mr-1" />
+                          Valid quantity format
+                        </p>
+                      )}
                     </div>
 
                     <div>

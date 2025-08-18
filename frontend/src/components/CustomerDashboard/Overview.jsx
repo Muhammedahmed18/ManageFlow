@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Building, FileText, Users, MessageCircle, TrendingUp, 
-  Plus, Eye, Clock, CheckCircle, XCircle, Activity, ChevronRight
+  Plus, Eye, Clock, CheckCircle, XCircle, Activity, ChevronRight,
+  Star, BarChart3, Award, Search
 } from 'lucide-react';
 import { colors } from '../../constants/theme';
 import api from '../../services/authService';
@@ -15,10 +16,42 @@ const Overview = ({ stats, loading }) => {
   console.log('Overview component received stats:', stats);
 
   const statCards = [
-    { title: 'Total Businesses', value: stats?.totalBusinesses || 0, icon: Building, color: 'blue', description: 'Your registered businesses' },
-    { title: 'Pending Requests', value: stats?.pendingRequests || 0, icon: FileText, color: 'yellow', description: 'Awaiting response' },
-    { title: 'Active Manufacturers', value: stats?.activeManufacturers || 0, icon: Users, color: 'green', description: 'Available partners' },
-    { title: 'Unread Messages', value: stats?.unreadMessages || 0, icon: MessageCircle, color: 'purple', description: 'New conversations' }
+    { 
+      title: 'Total Businesses', 
+      value: stats?.totalBusinesses || 0, 
+      icon: Building, 
+      color: colors.accent,
+      description: 'Your registered businesses',
+      trend: '+5% from last month',
+      trendColor: colors.success
+    },
+    { 
+      title: 'Pending Requests', 
+      value: stats?.pendingRequests || 0, 
+      icon: FileText, 
+      color: colors.warning,
+      description: 'Awaiting response',
+      trend: '2 new today',
+      trendColor: colors.warning
+    },
+    { 
+      title: 'Active Manufacturers', 
+      value: stats?.activeManufacturers || 0, 
+      icon: Users, 
+      color: colors.success,
+      description: 'Available partners',
+      trend: '+12% from last month',
+      trendColor: colors.success
+    },
+    { 
+      title: 'Unread Messages', 
+      value: stats?.unreadMessages || 0, 
+      icon: MessageCircle, 
+      color: colors.primary,
+      description: 'New conversations',
+      trend: '3 new messages',
+      trendColor: colors.accent
+    }
   ];
 
   const fetchRecentActivity = async () => {
@@ -85,7 +118,7 @@ const Overview = ({ stats, loading }) => {
           title: 'Add New Business',
           description: 'Register a new business profile',
           icon: Plus,
-          color: 'blue',
+          color: colors.accent,
           action: () => window.location.hash = '#businesses'
         }
       ];
@@ -96,7 +129,7 @@ const Overview = ({ stats, loading }) => {
         title: 'Discover Manufacturers',
         description: 'Find new manufacturing partners',
         icon: Users,
-        color: 'green',
+        color: colors.success,
         action: () => window.location.hash = '#manufacturers'
       });
 
@@ -107,7 +140,7 @@ const Overview = ({ stats, loading }) => {
           title: 'View Pending Requests',
           description: `${stats.pendingRequests} requests awaiting response`,
           icon: FileText,
-          color: 'yellow',
+          color: colors.warning,
           action: () => window.location.hash = '#requests'
         });
       }
@@ -180,39 +213,51 @@ const Overview = ({ stats, loading }) => {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
+      {/* Enhanced Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card, index) => (
           <motion.div
             key={card.title}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            transition={{ delay: 0.1 + index * 0.1 }}
+            className="group relative bg-white rounded-xl shadow-sm border p-6 hover:shadow-lg transition-all duration-300"
+            style={{ borderColor: colors.border }}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                <p className="text-2xl font-bold mt-1" style={{ color: colors.textPrimary }}>
-                  {card.value}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">{card.description}</p>
+            <div className="flex items-center justify-between mb-4">
+              <div 
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${card.color}20` }}
+              >
+                <card.icon className="h-6 w-6" style={{ color: card.color }} />
               </div>
-              <div className={`p-3 rounded-full bg-${card.color}-100`}>
-                <card.icon className={`w-6 h-6 text-${card.color}-600`} />
+              <TrendingUp className="h-5 w-5 text-green-500" />
+            </div>
+            <div>
+              <p className="text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
+                {card.title}
+              </p>
+              <p className="text-3xl font-bold mb-2" style={{ color: colors.textPrimary }}>
+                {card.value}
+              </p>
+              <div className="flex items-center text-sm" style={{ color: card.trendColor }}>
+                <TrendingUp className="w-4 h-4 mr-1" />
+                <span>{card.trend}</span>
               </div>
             </div>
           </motion.div>
         ))}
       </div>
 
+      {/* Quick Actions & Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          transition={{ delay: 0.5 }}
+          className="bg-white rounded-xl shadow-sm border p-6"
+          style={{ borderColor: colors.border }}
         >
           <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>
             Quick Actions
@@ -223,20 +268,31 @@ const Overview = ({ stats, loading }) => {
                 key={action.id}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + index * 0.1 }}
+                transition={{ delay: 0.6 + index * 0.1 }}
                 onClick={action.action}
-                className="w-full flex items-center p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all group"
+                className="w-full flex items-center justify-between p-4 rounded-lg border transition-all duration-200 hover:shadow-md"
+                style={{ 
+                  borderColor: colors.border,
+                  backgroundColor: colors.background
+                }}
               >
-                <div className={`p-2 rounded-full bg-${action.color}-100 mr-3`}>
-                  <action.icon className={`w-5 h-5 text-${action.color}-600`} />
+                <div className="flex items-center">
+                  <div 
+                    className="w-10 h-10 rounded-lg flex items-center justify-center mr-3"
+                    style={{ backgroundColor: `${action.color}20` }}
+                  >
+                    <action.icon className="h-5 w-5" style={{ color: action.color }} />
+                  </div>
+                  <div>
+                    <p className="font-medium" style={{ color: colors.textPrimary }}>
+                      {action.title}
+                    </p>
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      {action.description}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <p className="font-medium text-sm" style={{ color: colors.textPrimary }}>
-                    {action.title}
-                  </p>
-                  <p className="text-xs text-gray-500">{action.description}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:text-gray-600 transition-colors" />
+                <ChevronRight className="h-5 w-5" style={{ color: colors.textSecondary }} />
               </motion.button>
             ))}
           </div>
@@ -246,44 +302,44 @@ const Overview = ({ stats, loading }) => {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          transition={{ delay: 0.6 }}
+          className="bg-white rounded-xl shadow-sm border p-6"
+          style={{ borderColor: colors.border }}
         >
           <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>
             Recent Activity
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {recentActivity.length > 0 ? (
               recentActivity.map((activity, index) => (
                 <motion.div
                   key={`${activity.id}-${activity.type}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 + index * 0.1 }}
-                  className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  transition={{ delay: 0.7 + index * 0.1 }}
+                  className="flex items-center space-x-3"
                 >
-                  <div className="p-2 rounded-full bg-gray-100">
-                    <activity.icon className="w-4 h-4 text-gray-600" />
+                  <div 
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: `${colors.background}` }}
+                  >
+                    <activity.icon className="h-4 w-4" style={{ color: colors.textSecondary }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium" style={{ color: colors.textPrimary }}>
                       {activity.title}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">{activity.description}</p>
-                    <div className="flex items-center mt-2 space-x-2">
-                      <span className="text-xs text-gray-400">{activity.time}</span>
-                      {getStatusIcon(activity.status)}
-                      <span className={`text-xs ${getStatusColor(activity.status)}`}>
-                        {activity.status}
-                      </span>
-                    </div>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                      {activity.time}
+                    </p>
                   </div>
+                  {getStatusIcon(activity.status)}
                 </motion.div>
               ))
             ) : (
               <div className="text-center py-8">
-                <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No recent activity</p>
+                <Activity className="w-8 h-8 mx-auto mb-2" style={{ color: colors.textSecondary }} />
+                <p className="text-sm" style={{ color: colors.textSecondary }}>No recent activity</p>
               </div>
             )}
           </div>

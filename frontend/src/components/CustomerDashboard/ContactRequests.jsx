@@ -8,6 +8,7 @@ import {
 import { colors } from '../../constants/theme';
 import api from '../../services/authService';
 import RejectionModal from './modals/RejectionModal';
+import RequestDetailModal from './modals/RequestDetailModal';
 
 const ContactRequests = () => {
   const [activeTab, setActiveTab] = useState('received');
@@ -21,6 +22,8 @@ const ContactRequests = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [pendingRejection, setPendingRejection] = useState(null);
+  const [showRequestDetailModal, setShowRequestDetailModal] = useState(false);
+  const [currentRequest, setCurrentRequest] = useState(null);
 
   const fetchRequests = async () => {
     try {
@@ -107,6 +110,10 @@ const ContactRequests = () => {
       
       // Refresh the requests
       fetchRequests();
+      
+      // Close the rejection modal
+      setShowRejectionModal(false);
+      setPendingRejection(null);
     } catch (error) {
       console.error('Error rejecting request:', error);
       throw error;
@@ -139,6 +146,11 @@ const ContactRequests = () => {
   const handleViewProfile = (request) => {
     setSelectedRequest(request);
     setShowProfileModal(true);
+  };
+
+  const handleViewRequestDetails = (request) => {
+    setCurrentRequest(request);
+    setShowRequestDetailModal(true);
   };
 
   const getStatusColor = (status) => {
@@ -348,102 +360,19 @@ const ContactRequests = () => {
                       
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => setExpandedRequest(expandedRequest === request.id ? null : request.id)}
-                          className="flex items-center text-sm text-blue-600 hover:text-blue-700 transition-colors"
+                          onClick={() => handleViewRequestDetails(request)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                          style={{ backgroundColor: colors.primary + '10', color: colors.primary }}
                         >
-                          {expandedRequest === request.id ? (
-                            <>
-                              <ChevronDown className="w-4 h-4 mr-1" />
-                              Less
-                            </>
-                          ) : (
-                            <>
-                              <ChevronRight className="w-4 h-4 mr-1" />
-                              More
-                            </>
-                          )}
+                          <Eye size={16} />
+                          <span>View Details</span>
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Expanded Details */}
-                <AnimatePresence>
-                  {expandedRequest === request.id && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="mt-4 pt-4 border-t border-gray-200"
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <h4 className="font-medium text-gray-900 mb-3">Manufacturer Details</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Industry:</span>
-                              <span className="text-gray-900">{request.manufacturer.industry}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Location:</span>
-                              <span className="text-gray-900">{request.manufacturer.location}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Rejection Reason */}
-                          {request.status === 'rejected' && request.customer_response && (
-                            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                              <h5 className="font-medium text-red-900 mb-2 text-sm">Rejection Reason:</h5>
-                              <p className="text-sm text-red-700 leading-relaxed">
-                                {request.customer_response}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <h4 className="font-medium text-gray-900 mb-3">Actions</h4>
-                          <div className="space-y-2">
-                            {activeTab === 'received' && request.status === 'pending' && (
-                              <>
-                                <button
-                                  onClick={() => handleStatusUpdate(request.id, 'approved')}
-                                  className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                                >
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                  Approve Request
-                                </button>
-                                <button
-                                  onClick={() => handleRejectClick(request)}
-                                  className="w-full flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-                                >
-                                  <XCircle className="w-4 h-4 mr-2" />
-                                  Reject Request
-                                </button>
-                              </>
-                            )}
-                            <button 
-                              onClick={() => handleSendMessage(request)}
-                              className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                            >
-                              <MessageCircle className="w-4 h-4 mr-2" />
-                              {request.status === 'rejected' && request.customer_response ? 'Send Follow-up Message' : 'Send Message'}
-                            </button>
-                            <button 
-                              onClick={() => handleViewProfile(request)}
-                              className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Profile
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+
               </div>
             </motion.div>
           ))
@@ -572,6 +501,20 @@ const ContactRequests = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Request Detail Modal */}
+      <RequestDetailModal
+        request={currentRequest}
+        isOpen={showRequestDetailModal}
+        onClose={() => {
+          setShowRequestDetailModal(false);
+          setCurrentRequest(null);
+        }}
+        onApprove={handleStatusUpdate}
+        onReject={handleRejectClick}
+        onSendMessage={handleSendMessage}
+        isProcessing={false}
+      />
 
       {/* Rejection Modal */}
       <RejectionModal

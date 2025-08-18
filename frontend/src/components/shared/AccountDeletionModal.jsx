@@ -179,7 +179,17 @@ const AccountDeletionModal = ({ isOpen, onClose, onSuccess, userType = 'user' })
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-gray-100 rounded-full p-1 transition-colors z-10"
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '32px',
+                        minHeight: '32px'
+                      }}
                     >
                       {showPassword ? (
                         <EyeOff className="h-5 w-5 text-gray-400" />

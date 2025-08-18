@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from .serializers import RegisterSerializer, CustomTokenObtainPairSerializer, UserSerializer
@@ -584,35 +584,14 @@ class CustomLoginView(TokenObtainPairView):
     
     def post(self, request, *args, **kwargs):
         try:
-            # Rate limiting check
-            client_ip = self.get_client_ip(request)
-            rate_limit_key = f"login_attempts:{client_ip}"
-            
-            if not RateLimitUtils.check_rate_limit(rate_limit_key, 10, 300):  # 10 attempts per 5 minutes
-                remaining_time = cache.ttl(rate_limit_key)
-                return Response({
-                    "error": "Too many login attempts. Please try again later.",
-                    "retry_after": remaining_time
-                }, status=429)
-            
             # Call parent method to handle authentication
             response = super().post(request, *args, **kwargs)
             
-            # If login successful, record activity and enhance response
+            # If login successful, enhance response
             if response.status_code == 200:
                 try:
                     # Get user from request (set by authentication)
                     user = request.user
-                    
-                    # Record login activity
-                    UserActivityTracker.record_login(
-                        user=user,
-                        ip_address=client_ip,
-                        user_agent=request.META.get('HTTP_USER_AGENT', '')
-                    )
-                    
-                    # Generate enhanced tokens
-                    tokens = TokenManager.generate_tokens(user)
                     
                     # Update response with enhanced data
                     response.data.update({
@@ -621,37 +600,47 @@ class CustomLoginView(TokenObtainPairView):
                             'username': user.username,
                             'email': user.email,
                             'role': user.role,
-                            'first_name': user.first_name,
-                            'last_name': user.last_name,
-                            'is_approved': user.is_approved,
-                            'rejected': user.rejected,
-                            'email_verified': user.email_verified
-                        },
-                        'access_token_expires': tokens['access_token_expires'],
-                        'refresh_token_expires': tokens['refresh_token_expires']
+                            'first_name': user.first_name or '',
+                            'last_name': user.last_name or '',
+                            'is_approved': user.is_approved
+                        }
                     })
                     
-                    logger.info(f"User {user.email} logged in successfully from IP {client_ip}")
+                    logger.info(f"User {user.email} logged in successfully")
                     
                 except Exception as e:
-                    logger.error(f"Error recording login activity: {str(e)}")
-                    # Don't fail the login if activity tracking fails
+                    logger.error(f"Error enhancing login response: {str(e)}")
+                    # Don't fail the login if enhancement fails
             
             return response
             
+        except serializers.ValidationError as e:
+            # Preserve validation errors from serializer (including role validation)
+            logger.warning(f"Login validation error: {str(e)}")
+            
+            # Handle different error formats
+            if hasattr(e, 'detail'):
+                if isinstance(e.detail, dict):
+                    # Handle format like {'non_field_errors': [ErrorDetail(string='Invalid username or password.', code='invalid')]}
+                    if 'non_field_errors' in e.detail and len(e.detail['non_field_errors']) > 0:
+                        error_message = str(e.detail['non_field_errors'][0])
+                    else:
+                        error_message = str(e.detail)
+                elif isinstance(e.detail, list) and len(e.detail) > 0:
+                    error_message = str(e.detail[0])
+                else:
+                    error_message = str(e.detail)
+            else:
+                error_message = str(e)
+                
+            return Response({
+                "detail": error_message
+            }, status=400)
         except Exception as e:
             logger.error(f"Login error: {str(e)}")
             return Response({
                 "error": "Login failed. Please check your credentials and try again."
             }, status=400)
-    
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -668,14 +657,17 @@ def verify_password(request):
         user = authenticate(username=request.user.username, password=password)
         
         if user and user == request.user:
+            logger.info(f"Password verification successful for user {request.user.username}")
             return Response({'valid': True}, status=status.HTTP_200_OK)
         else:
+            logger.warning(f"Password verification failed for user {request.user.username}")
             return Response({'valid': False, 'error': 'Incorrect password'}, status=status.HTTP_200_OK)
             
     except Exception as e:
+        logger.error(f"Password verification error for user {request.user.username}: {str(e)}")
         return Response({'valid': False, 'error': 'Password verification failed'}, status=status.HTTP_200_OK)
 
-@api_view(['DELETE'])
+@api_view(['DELETE', 'POST'])
 @permission_classes([IsAuthenticated])
 def delete_account(request):
     """
@@ -694,12 +686,19 @@ def delete_account(request):
         
         # Use transaction to ensure all related data is deleted
         with transaction.atomic():
+            # Delete all user tokens first
+            tokens = OutstandingToken.objects.filter(user=user)
+            for token in tokens:
+                BlacklistedToken.objects.filter(token=token).delete()
+                token.delete()
+            
             # Delete user (this will cascade to related objects)
             user.delete()
             
         return Response({'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
         
     except Exception as e:
+        logger.error(f"Account deletion error: {str(e)}")
         return Response({'error': 'Account deletion failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserSettingsView(APIView):

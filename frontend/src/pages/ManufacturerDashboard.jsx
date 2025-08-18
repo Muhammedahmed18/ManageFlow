@@ -15,6 +15,7 @@ import ProposalDiscovery from '../components/ManufacturerDashboard/ProposalDisco
 import SettingsComponent from '../components/ManufacturerDashboard/Settings';
 import ChatManager from '../components/ChatManager/ChatManager';
 import Sidebar from '../components/ManufacturerDashboard/Sidebar';
+import MyBusinesses from '../components/ManufacturerDashboard/MyBusinesses';
 
 const ManufacturerDashboard = () => {
   const { currentUser } = useAuth();
@@ -205,6 +206,10 @@ const ManufacturerDashboard = () => {
 
   const stats = {
     totalCustomers: customers.length,
+    totalBusinesses: customers.filter(c => c.relationship_status === 'approved').length,
+    totalProducts: 0, // Will be calculated if needed
+    totalOrders: 0, // Will be calculated if needed
+    approvedCustomers: customers.filter(c => c.relationship_status === 'approved').length,
     activeCustomers: customers.filter(c => c.relationship_status === 'approved').length,
     pendingRequests: requestStats?.pending_requests || 0,
     totalRequests: requestStats?.total_requests || 0,
@@ -241,27 +246,45 @@ const ManufacturerDashboard = () => {
 
   // Get current tab label for header
   const getCurrentTabLabel = () => {
-    const tabLabels = {
-      'overview': 'Overview',
-      'requests': 'My Requests',
-      'discover': 'Discover Customers',
-      'proposals': 'Proposals',
-      'chats': 'Chats',
-      'settings': 'Settings'
-    };
-    return tabLabels[activeTab] || 'Dashboard';
+    switch (activeTab) {
+      case 'overview':
+        return 'Overview';
+      case 'businesses':
+        return 'My Businesses';
+      case 'requests':
+        return 'My Requests';
+      case 'discover':
+        return 'Discover Customers';
+      case 'proposals':
+        return 'Proposals';
+      case 'settings':
+        return 'Settings';
+      case 'chats':
+        return 'Chats';
+      default:
+        return 'Dashboard';
+    }
   };
 
   const getCurrentTabDescription = () => {
-    const tabDescriptions = {
-      'overview': 'Business overview and performance metrics',
-      'requests': 'Manage contact requests from customers',
-      'discover': 'Find and connect with potential customers',
-      'proposals': 'Respond to customer proposals',
-      'chats': 'Communicate with your customers',
-      'settings': 'Manage your account and preferences'
-    };
-    return tabDescriptions[activeTab] || '';
+    switch (activeTab) {
+      case 'overview':
+        return 'Monitor your business network and performance';
+      case 'businesses':
+        return 'Manage your joined business partnerships';
+      case 'requests':
+        return 'Track and manage customer requests';
+      case 'discover':
+        return 'Find new business opportunities';
+      case 'proposals':
+        return 'View and respond to proposals';
+      case 'settings':
+        return 'Manage your account settings';
+      case 'chats':
+        return 'Communicate with customers';
+      default:
+        return 'Welcome to your manufacturer dashboard';
+    }
   };
 
   return (
@@ -321,16 +344,19 @@ const ManufacturerDashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <Overview
-                  customers={filteredCustomers}
-                  loading={loading}
-                  expandedCustomers={expandedCustomers}
-                  toggleCustomerExpansion={toggleCustomerExpansion}
-                  getStatusColor={getStatusColor}
-                  getStatusIcon={getStatusIcon}
-                  stats={stats}
-                  colors={colors}
-                />
+                <Overview stats={stats} setActiveTab={setActiveTab} />
+              </motion.div>
+            )}
+
+            {activeTab === 'businesses' && (
+              <motion.div
+                key="businesses"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <MyBusinesses setActiveTab={setActiveTab} />
               </motion.div>
             )}
 
@@ -343,22 +369,21 @@ const ManufacturerDashboard = () => {
                 transition={{ duration: 0.3 }}
               >
                 <Requests
-                  requests={requests}
-                  requestStats={requestStats}
-                  requestsLoading={requestsLoading}
                   filteredRequests={filteredRequests}
+                  loading={requestsLoading}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  getStatusColor={getStatusColor}
+                  getStatusIcon={getStatusIcon}
                   selectedRequest={selectedRequest}
+                  setSelectedRequest={setSelectedRequest}
                   showRequestDetail={showRequestDetail}
-                  fetchRequestDetail={fetchRequestDetail}
                   setShowRequestDetail={setShowRequestDetail}
-                  getRequestStatusColor={getRequestStatusColor}
-                  getRequestStatusIcon={getRequestStatusIcon}
-                  formatDate={formatDate}
-                  setActiveTab={setActiveTab}
-                  colors={colors}
-                  refreshRequests={fetchRequests}
                   fetchIncomingRequests={fetchIncomingRequests}
                   fetchIncomingRequestDetail={fetchIncomingRequestDetail}
+                  refreshRequests={fetchRequests}
                 />
               </motion.div>
             )}
@@ -371,10 +396,7 @@ const ManufacturerDashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <DiscoverCustomers
-                  currentUser={currentUser}
-                  colors={colors}
-                />
+                <DiscoverCustomers />
               </motion.div>
             )}
 
@@ -386,7 +408,7 @@ const ManufacturerDashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <ProposalDiscovery colors={colors} />
+                <ProposalDiscovery />
               </motion.div>
             )}
 
@@ -398,7 +420,7 @@ const ManufacturerDashboard = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <SettingsComponent colors={colors} />
+                <SettingsComponent />
               </motion.div>
             )}
 
